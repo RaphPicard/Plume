@@ -1,3 +1,8 @@
+Par  : Picard Raphaël 4 ETI CLBD
+Lieu : CPE LYON
+date : Avril 2026
+Codé en : Vue, NodeJS ...
+
 # Projet_Transversal
 Projet d'une base roulante permettant de déplacer les bagages d'un utilisateur dans un aéroport et de le suivre. Ici on va développer le serveur admin et l'application utilisateur.
 
