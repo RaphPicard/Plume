@@ -1,0 +1,12 @@
+{
+  "name": "autocart-raspberry",
+  "version": "1.0.0",
+  "description": "Client chariot AUTOCART pour Raspberry Pi 3B",
+  "main": "cart_client.js",
+  "scripts": {
+    "start": "node cart_client.js"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.3"
+  }
+}

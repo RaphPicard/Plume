@@ -1,0 +1,30 @@
+# Environment variables et secrets
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Node
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database exports (local backups)
+*.sql.bak
+dump.sql
+
+# Runtime
+*.pid
