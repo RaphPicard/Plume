@@ -4,7 +4,7 @@ Projet d'une base roulante permettant de déplacer les bagages d'un utilisateur 
 ## Utilisation Ghitub 
 - Pour cloner le projet, utilisez la commande suivante dans votre terminal :
 ```bash
-git clone https://github.com/Raphouman/Projet_Transversal.git
+git clone https://github.com/Raphouman/Plume.git
 ```
 - Pour récupérer les dernières modifications, utilisez la commande suivante :
 ```bash
@@ -49,7 +49,7 @@ node server/index.js
 ---
 ## Création projet View (Frontend)
 
-### Dans le dossier plume/
+### À la racine du dépôt
 cd app
 
 ### Créer le projet Vue avec Vite
@@ -84,7 +84,7 @@ Lance les deux bases en arrière-plan. Les données PostgreSQL sont persistantes
 
 ### 3. Créer les tables + chariots
 ```bash
-docker compose cp plume/server/schema.sql postgres:/schema.sql
+docker compose cp server/schema.sql postgres:/schema.sql
 docker compose exec postgres psql -U postgres -d plume -f /schema.sql
 ```
 Crée les tables `users` et `carts` et insère les chariots C-001, C-002, C-042.
@@ -92,7 +92,7 @@ Crée les tables `users` et `carts` et insère les chariots C-001, C-002, C-042.
 
 ### 4. Installer les dépendances Node et insérer les utilisateurs
 ```bash
-cd plume && npm install
+npm install
 node server/seed-users.js
 ```
 Insère `raphou` (admin) et `evan` (user) avec leurs mots de passe hashés via bcrypt.
@@ -122,18 +122,18 @@ docker compose up -d
 
 ### Terminal 2 — Serveur Node.js (backend, port 3000)
 ```bash
-node plume/server/index.js
+node server/index.js
 ```
 
 ### Terminal 3 — Simulateur de chariot (optionnel)
 ```bash
-node plume/server/simulate-cart.js
+node server/simulate-cart.js
 ```
 Simule un chariot qui envoie des données toutes les secondes (pour tester sans vrai hardware).
 
 ### Terminal 4 — Frontend Vue (port 5173)
 ```bash
-cd plume/app && npm run dev
+cd app && npm run dev
 ```
 
 ---
@@ -141,8 +141,8 @@ cd plume/app && npm run dev
 ## Résumé du flux complet pour tester
 ```
 1. docker compose up -d                   (PostgreSQL + Redis)
-2. node plume/server/index.js             (port 3000)
-3. cd plume/app  →  npm run dev           (port 5173)
+2. node server/index.js                   (port 3000)
+3. cd app  →  npm run dev                 (port 5173)
 4. Ouvrir http://localhost:5173
 5. Login : raphou / raphou  (ou evan / evan)
 6. Saisir un cartId : C-042
