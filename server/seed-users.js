@@ -6,7 +6,7 @@
 // À lancer UNE SEULE FOIS après avoir créé la base avec schema.sql.
 
 const { Pool } = require('pg')
-const bcrypt   = require('bcrypt')
+const bcrypt   = require('bcryptjs')
 
 const pg = new Pool({
   host:     process.env.PG_HOST     || 'localhost',

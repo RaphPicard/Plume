@@ -2,7 +2,7 @@
 // server/index.js
 const express = require('express')        // pour les routes HTTP (login)
 const jwt     = require('jsonwebtoken')   // pour générer des tokens JWT
-const bcrypt  = require('bcrypt')         // pour vérifier le mot de passe hashé
+const bcrypt  = require('bcryptjs')        // pour vérifier le mot de passe hashé
 const cors    = require('cors')           // pour autoriser les requêtes cross-origin
 
 const { getUserByUsername, getCartState } = require('./db')  // accès PostgreSQL

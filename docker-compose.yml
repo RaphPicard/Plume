@@ -10,6 +10,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data   # données persistantes entre redémarrages
+      - ./server/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
 
   redis:
     image: redis:7
