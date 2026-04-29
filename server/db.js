@@ -13,6 +13,8 @@
 //   'C-002': { ownerId: null, status: 'available' },
 // }
 
+require('./load-env').loadEnv()
+
 const { Pool } = require('pg')
 const Redis    = require('ioredis')
 

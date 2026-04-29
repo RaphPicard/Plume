@@ -1,5 +1,7 @@
 // Configuration de la route http://localhost:3000/login et du header CORS pour autoriser les requêtes depuis le frontend (http://localhost:5173)
 // server/index.js
+require('./load-env').loadEnv()
+
 const express = require('express')        // pour les routes HTTP (login)
 const jwt     = require('jsonwebtoken')   // pour générer des tokens JWT
 const bcrypt  = require('bcryptjs')        // pour vérifier le mot de passe hashé

@@ -5,6 +5,8 @@
 //
 // À lancer UNE SEULE FOIS après avoir créé la base avec schema.sql.
 
+require('./load-env').loadEnv()
+
 const { Pool } = require('pg')
 const bcrypt   = require('bcryptjs')
 

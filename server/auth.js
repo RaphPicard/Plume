@@ -1,6 +1,8 @@
 // Middleware JWT pour l'authentification
 // server/auth.js
 
+require('./load-env').loadEnv()
+
 const jwt = require('jsonwebtoken');
 const SECRET = process.env.JWT_SECRET;
 if (!SECRET) throw new Error('[auth] JWT_SECRET manquant — définir dans .env');
