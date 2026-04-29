@@ -1,4 +1,4 @@
-# CLAUDE.md — Projet Transversal : Gestion de flotte de chariots connectés
+# RAPHOU.md — Projet Transversal : Gestion de flotte de chariots connectés
 
 ---
 
@@ -6,7 +6,7 @@
 
 ### Intro — Lancer le projet et montrer les interfaces
 
-> "Le projet s'appelle AUTOCART. C'est un système de gestion de flotte de chariots à bagages connectés pour aéroport. Il y a trois acteurs : l'utilisateur (agent au sol), l'administrateur (superviseur), et le chariot lui-même (Raspberry Pi)."
+> "Le projet s'appelle PLUME. C'est un système de gestion de flotte de chariots à bagages connectés pour aéroport. Il y a trois acteurs : l'utilisateur (agent au sol), l'administrateur (superviseur), et le chariot lui-même (Raspberry Pi)."
 
 **Lancer dans cet ordre (dans 4 terminaux) :**
 
@@ -15,13 +15,13 @@
 docker compose up -d
 
 # 2. Serveur backend
-node plume/server/index.js        # → écoute sur :3000
+node server/index.js        # → écoute sur :3000
 
 # 3. Simulateur de chariot (remplace le Raspberry Pi)
-node plume/server/simulate-cart.js
+node server/simulate-cart.js
 
 # 4. Frontend
-cd plume/app && npm run dev       # → http://localhost:5173
+cd app && npm run dev       # → http://localhost:5173
 ```
 
 **Montrer les deux interfaces :**
@@ -34,7 +34,7 @@ cd plume/app && npm run dev       # → http://localhost:5173
 
 #### 1.1 Vue Router — comment on navigue
 
-> "Tout commence dans `router/index.js`. Il n'y a que 3 routes :`
+> "Tout commence dans `app/src/router/index.js`. Il n'y a que 3 routes :`
 
 ```
 /           → ScanView.vue      (login + déverrouillage chariot)
@@ -62,9 +62,9 @@ Body: { username, password }
 → Réponse: { token, role }
 ```
 
-Avec ce token, le frontend ouvre la connexion WebSocket :
+Avec ce token, le frontend ouvre la connexion WebSocket au serveur :
 ```js
-connectSocket(token)   // → socket.auth = { token }, socket.connect()
+connectSocket(token)   // → socket.auth = { token }, socket.connect() dans api/socket.js
 ```
 Le serveur valide le JWT dans `auth.js` (middleware `io.use(authMiddleware)`), puis appelle le bon handler selon le rôle.
 

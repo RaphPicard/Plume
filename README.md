@@ -98,7 +98,17 @@ npm run dev
 
 ---
 
-# LANCER
+#
+
+```bash
+docker compose up -d pgadmin
+```
+
+Add New Server →
+
+Name : plume
+Host : postgres (nom du service Docker, pas localhost)
+Port : 5432 LANCER
 
 ## Première installation (une seule fois)
 

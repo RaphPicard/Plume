@@ -96,7 +96,7 @@ async function handleLogin() {
       unsubOk()
       unsubErr()
       // Les admins sont redirigés directement vers le dashboard
-      if (role === 'admin') router.push('/admin')
+      if (role === 'admin') router.push('/admin') // ==> REDIRECTION VUE
     })
     const unsubErr = onConnectError((err) => {
       error.value = 'Connexion serveur échouée : ' + err.message
