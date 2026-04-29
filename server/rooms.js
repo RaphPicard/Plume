@@ -90,12 +90,11 @@ class RoomManager {
 
   registerAdmin(socket) {
     socket.join(this.allAdminsRoom)
+    // Rejouer cart_online pour les chariots déjà connectés avant l'ouverture du dashboard
+    for (const cartId of this._cartSockets.keys()) {
+      socket.emit('cart_online', { cartId, timestamp: Date.now() })
+    }
   }
-
-
-
-
-
 
   // ── File de commandes ───────────────────────────────────────────────────────
 
