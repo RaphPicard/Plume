@@ -14,6 +14,10 @@ app.use(express.json())
 const SECRET      = process.env.JWT_SECRET   || 'dev-secret'    // .env ???
 const CART_SECRET = process.env.CART_SECRET  || 'cart-dev-secret'
 
+function createGuestUserId() {
+  return `guest-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`
+}
+
 // Route de login — vérifie l'utilisateur en base et retourne un JWT
 app.post('/login', async (req, res) => {
   const { username, password } = req.body
@@ -33,6 +37,18 @@ app.post('/login', async (req, res) => {
     { expiresIn: '24h' }
   )
   res.json({ token, role: user.role })  // récupérer dans le fichier ScanView.vue du frontend pour stocker le token dans le localStorage et l'utiliser pour se connecter au WebSocket (api/socket.js) et pour afficher la bonne interface (ScanView ou AdminView)
+})
+
+
+// Session automatique pour la vue de scan : pas d'identifiants demandés, on crée un token utilisateur éphémère
+app.post('/session', (_req, res) => {
+  const token = jwt.sign(
+    { role: 'user', userId: createGuestUserId() },
+    SECRET,
+    { expiresIn: '24h' }
+  )
+
+  res.json({ token, role: 'user' })
 })
 
 

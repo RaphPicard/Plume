@@ -1,38 +1,20 @@
 <!-- src/views/ScanView.vue -->
-<!-- Point d'entrée de la vue de connexion/QR_code , fais le lien entre le frontend et le serveur WebSocket (socket.js) -->
 <template>
   <div class="scan-screen">
 
     <header>
       <span class="logo">AUTOCART</span>
-      <h1>Prêt à partir ?</h1>
-      <p>Entrez l'identifiant du chariot</p>
+      <h1>Scanner un chariot</h1>
+      <p>Connexion automatique à une session de scan.</p>
     </header>
 
-    <!-- Formulaire de login + scan -->
     <div class="card">
-
-      <!-- Étape 1 : login (si pas encore connecté) -->
-      <section v-if="!store.isConnected"> <!-- Si non connecté -->
-        <h2>Connexion</h2>
-        <input
-          v-model="username"
-          type="text"
-          placeholder="Nom d'utilisateur"
-        />
-        <input
-          v-model="password"
-          type="password"
-          placeholder="Mot de passe"
-        />
-        <button @click="handleLogin" :disabled="loading">
-          {{ loading ? 'Connexion...' : 'Se connecter' }}
-        </button>
-        <p class="error" v-if="error">{{ error }}</p>
+      <section v-if="loadingSession">
+        <h2>Préparation</h2>
+        <p class="helper-text">Ouverture de la session de scan...</p>
       </section>
 
-      <!-- Étape 2 : saisie du chariot (si connecté) -->
-      <section v-else>  <!-- if store.isConnected ==> app/store/cart.js : setConnected() dans handleLogin()-->
+      <section v-else>
         <h2>Scanner un chariot</h2>
         <div class="qr-placeholder">
           <span>▦</span>
@@ -55,64 +37,55 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCartStore } from '../store/cart'
-import { connectSocket, unlockCart, onCartStatus, onAlert, onConnected, onConnectError } from '../api/socket'
+import { connectSocket, unlockCart, onCartStatus, onAlert } from '../api/socket'
+import { getScanSession, saveScanSession } from '../api/scanAuth'
 
 const router = useRouter()  //le routeur va permettre de naviguer vers la vue de suivi (TrackingView) après le déverrouillage du chariot
 const store  = useCartStore() //appel cart.js pour partager les données du chariot entre les vues ScanView et TrackingView
 
-// --- État local du composant ---
-const username = ref('')
-const password = ref('')
 const cartId   = ref('')
+const loadingSession = ref(true)
 const loading  = ref(false)
 const error    = ref('')
 
-// --- Login : appel HTTP pour récupérer le JWT, puis connexion WS ---
-async function handleLogin() {
-  loading.value = true
-  error.value   = ''
+async function ensureScanSession() {
+  const existingSession = getScanSession()
+  if (existingSession) {
+    await connectSocket(existingSession.token)
+    return
+  }
 
   try {
-    // Appel HTTP classique vers le serveur
-    const res = await fetch('http://localhost:3000/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: username.value,
-        password: password.value
-      })
-    })
+    const res = await fetch('http://localhost:3000/session', { method: 'POST' })
 
-    if (!res.ok) throw new Error('Identifiants incorrects')
+    if (!res.ok) throw new Error('Impossible de créer la session de scan')
 
-    const { token, role } = await res.json()
-
-    // Écouter la confirmation de connexion
-    const unsubOk  = onConnected(() => {
-      store.setConnected(true)    // MAJ du store : isConnected = true pour affichage de la section de saisie du chariot (v-else)
-      unsubOk()
-      unsubErr()
-      // Les admins sont redirigés directement vers le dashboard
-      if (role === 'admin') router.push('/admin') // ==> REDIRECTION VUE
-    })
-    const unsubErr = onConnectError((err) => {
-      error.value = 'Connexion serveur échouée : ' + err.message
-      unsubOk()
-      unsubErr()
-    })
-
-    // Connexion WebSocket après les listeners onConnected et onConnectError pour gérer le résultat de la connexion
-    connectSocket(token)
+    const { token } = await res.json()
+    saveScanSession(token)
+    await connectSocket(token)
 
   } catch (err) {
     error.value = err.message
-  } finally {
-    loading.value = false
+    throw err
   }
 }
+
+onMounted(async () => {
+  loadingSession.value = true
+  error.value = ''
+
+  try {
+    await ensureScanSession()
+    store.setConnected(true)
+  } catch {
+    // message déjà positionné par ensureScanSession
+  } finally {
+    loadingSession.value = false
+  }
+})
 
 // --- Déverrouillage chariot ---
 async function handleUnlock() {
@@ -147,7 +120,6 @@ async function handleUnlock() {
 </script>
 
 <style scoped>
-/* "scoped" = ces styles s'appliquent UNIQUEMENT à ce composant */
 .scan-screen {
   min-height: 100vh;
   background: #0f0f12;
@@ -211,6 +183,10 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   color: #f87171;
   font-size: 13px;
   margin-top: 10px;
+  text-align: center;
+}
+
+.helper-text {
   text-align: center;
 }
 

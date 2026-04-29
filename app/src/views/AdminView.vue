@@ -7,6 +7,7 @@
       <span class="logo">AUTOCART</span>
       <h1>Dashboard Admin</h1>
       <span class="badge-admin">Administrateur</span>
+      <button class="logout-btn" type="button" @click="logoutAdmin">Déconnexion</button>
     </header>
 
     <!-- Chargement initial -->
@@ -128,6 +129,7 @@
 
 <script setup>
 import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useCartStore } from '../store/cart'
 import {
   getFleet,
@@ -138,9 +140,12 @@ import {
   onCartOffline,
   onSensorUpdate,
   onCartPosition,
+  disconnectSocket,
 } from '../api/socket'
+import { clearAdminSession } from '../api/adminAuth'
 
 const store   = useCartStore()
+const router = useRouter()
 const loading = ref(true)
 const selectedStream = ref('raw')
 
@@ -187,6 +192,12 @@ function recall(cartId) {
   adminRecall(cartId)
 }
 
+function logoutAdmin() {
+  clearAdminSession()
+  disconnectSocket()
+  router.replace('/admin')
+}
+
 // --- Helpers ---
 function statusLabel(cart) {
   if (!cart.online) return 'Hors ligne'
@@ -209,6 +220,21 @@ function statusLabel(cart) {
   align-items: center;
   gap: 16px;
   margin-bottom: 28px;
+}
+
+.logout-btn {
+  margin-left: auto;
+  width: auto;
+  padding: 10px 14px;
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  color: #fca5a5;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.logout-btn:hover {
+  background: rgba(248, 113, 113, 0.18);
 }
 
 .logo {

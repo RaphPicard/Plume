@@ -11,14 +11,51 @@ const socket = io(SERVER_URL, {
   autoConnect: false,  // on se connecte manuellement après login
 })
 
+let currentSocketToken = null
+
 // --- Connexion / déconnexion ---
 
 export function connectSocket(token) {  //appelé dans ScanView.vue après un login réussi (QR code ou manuel)
+  if (socket.connected && currentSocketToken === token) {
+    return Promise.resolve()
+  }
+
+  if (socket.connected) {
+    socket.disconnect()
+  }
+
+  currentSocketToken = token
   socket.auth = { token }
   socket.connect()
+
+  return new Promise((resolve, reject) => {
+    if (socket.connected) {
+      resolve()
+      return
+    }
+
+    const handleConnect = () => {
+      cleanup()
+      resolve()
+    }
+
+    const handleConnectError = (error) => {
+      cleanup()
+      reject(error)
+    }
+
+    const cleanup = () => {
+      socket.off('connect', handleConnect)
+      socket.off('connect_error', handleConnectError)
+    }
+
+    socket.once('connect', handleConnect)
+    socket.once('connect_error', handleConnectError)
+  })
 }
 
 export function disconnectSocket() {
+  currentSocketToken = null
   socket.disconnect()
 }
 
