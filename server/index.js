@@ -141,4 +141,4 @@ app.get('/', (_req, res) => { //_req car on s'en fiche de la requête HTTP, on v
   res.send('Hello World from Express! Tout se passe sur le frontend pour l utilisateur (http://localhost:5173) et sur les WebSockets)');
 });
 // Démarrer sur le port 3000
-httpServer.listen(3000, () => console.log('Server on :3000'));  //http://localhost:3000
+  httpServer.listen(3000, '0.0.0.0', () => console.log('Server on :3000 (0.0.0.0)'));  // accessible depuis le réseau local
