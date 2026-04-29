@@ -223,6 +223,17 @@ npm start
 
 # TODO feat evanman (architecture à respecter)
 
+## TODO IMPORTANT EVANMAN
+- Créer une route `localhost:5173/admin` (pas de boutton en Vue) qui emmene sur une page login (token admin à rentrer ==> JWT stocké en bdd ET vérif la JWT à chaque requete sur les routes /admin/\*)
+  - Après login, rediriger vers `/admin/dashboard` qui affiche la liste des chariots et leurs données en temps réel (via Socket.IO)
+
+- Persistance session, création session
+
+
+
+
+
+
 - QR CODE du chariot/robot (id hashé ?) qui renvoie vers localhost:5173/tracking?cartId={cartId}
   (ca évite d'avoir une caméra pour scanner les qr codes dans l'application elle même)
   - id = entier (pas de lettre [ex : C-001]) pour éviter les problèmes de saisie
@@ -234,20 +245,15 @@ npm start
   - Si dispo ==> Change l'état du chariot (dans le client [robot] qui va maj son état au server)
     ET émet un événement `pairing_success` au client Vue, qui peut alors se connecter au chariot (à son interface visuelle)
 
-- Créer une route `/admin` (pas de boutton en Vue) qui emmene sur une page login (token admin à rentrer ==> JWT stocké en bdd ET vérif la JWT à chaque requete sur les routes /admin/\*)
-  - Après login, rediriger vers `/admin/dashboard` qui affiche la liste des chariots et leurs données en temps réel (via Socket.IO)
 
 
-- Créer une route `/admin` (pas de boutton en Vue) qui emmene sur une page login (token admin à rentrer ==> JWT stocké en bdd ET vérif la JWT à chaque requete sur les routes /admin/*)
-    - Après login, rediriger vers `/admin/dashboard` qui affiche la liste des chariots et leurs données en temps réel (via Socket.IO)
 
+
+
+# TODO IMPORTANT RAPHOUMAN
 - COMMANDES : 
    - A stocker dans 3 listes dans le JSON : `ACKcmd[id]` et `execCmd[id]` et (pour différencier les commandes en attente et celles exécutées). Et `SkipCmd[id]` pour les commandes ignorées (pour les ignorer, suite à un ordre de priorité)
 
-
-
-# TODO IMPORTANT
-- Persistance session, création session
 - JSON envoyé du serveur au raspberry doit se faire toutes les X ms et doit contenir les données suivantes: 
 ```json
 {

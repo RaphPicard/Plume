@@ -1,7 +1,7 @@
 // Events côté chariots
 // server/events/cart.js
 
-function registerCartEvents(io, socket, rooms) {
+function registerCartEvents(io, socket, rooms) {    // appelé dans server.js lors de la connexion d'un chariot
   const { cartId } = socket.data;
 
   rooms.registerCart(socket, cartId);
