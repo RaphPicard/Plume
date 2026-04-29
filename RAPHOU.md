@@ -488,3 +488,5 @@ node plume/server/simulate-cart.js
 | 🟡 Utile | Reconnexion WebSocket frontend (re-unlock après coupure) | `plume/app/src/api/socket.js`, `plume/store/cart.js` |
 | 🟢 Nice-to-have | Carte de position admin | `plume/app/src/views/AdminView.vue` |
 | 🟢 Nice-to-have | Restreindre CORS en production | `plume/server/index.js` |
+
+

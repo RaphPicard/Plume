@@ -83,7 +83,7 @@ async function getAllCarts() {
 // Retourne { id, username, password_hash, role } ou null
 async function getUserByUsername(username) {
   const { rows } = await pg.query(
-    'SELECT id, username, password_hash, role FROM users WHERE username = $1',
+    'SELECT id, username, password_hash, role FROM users WHERE username = $1',  // INJECTION SQL ???
     [username]
   )
   return rows[0] ?? null

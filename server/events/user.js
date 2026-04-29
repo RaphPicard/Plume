@@ -17,7 +17,7 @@ function registerUserEvents(io, socket, rooms) {
       await setCartOwner(cartId, userId);
 
       rooms.assignUser(socket, cartId, userId);
-      socket.data.activeCartId = cartId;
+      socket.data.activeCartId = cartId;    // stocker le cartId actif dans socket.data pour pouvoir le libérer en cas de déconnexion
 
       rooms.toCart(cartId, 'cmd', { action: 'start_tracking' });
 

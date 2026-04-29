@@ -63,11 +63,14 @@ if (!store.hasActiveCart) {
 }
 
 async function handleStop() {
-  await stopCart()
+  await stopCart()  // socket.emit('stop_cart', {}, resolve)
   store.clearActiveCart()
   router.push('/')
 }
 </script>
+
+
+
 
 <style scoped>
 .tracking-screen {

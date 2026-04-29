@@ -13,7 +13,7 @@
     <div class="card">
 
       <!-- Étape 1 : login (si pas encore connecté) -->
-      <section v-if="!store.isConnected">
+      <section v-if="!store.isConnected"> <!-- Si non connecté -->
         <h2>Connexion</h2>
         <input
           v-model="username"
@@ -32,11 +32,11 @@
       </section>
 
       <!-- Étape 2 : saisie du chariot (si connecté) -->
-      <section v-else>
+      <section v-else>  <!-- if store.isConnected ==> app/store/cart.js : setConnected() dans handleLogin()-->
         <h2>Scanner un chariot</h2>
         <div class="qr-placeholder">
           <span>▦</span>
-          <p>QR Code (caméra à implémenter)</p>
+          <p>QR Code (caméra à implémenter ???)</p>
         </div>
         <p class="separator">— ou saisir manuellement —</p>
         <input
@@ -92,7 +92,7 @@ async function handleLogin() {
 
     // Écouter la confirmation de connexion
     const unsubOk  = onConnected(() => {
-      store.setConnected(true)
+      store.setConnected(true)    // MAJ du store : isConnected = true pour affichage de la section de saisie du chariot (v-else)
       unsubOk()
       unsubErr()
       // Les admins sont redirigés directement vers le dashboard
@@ -129,10 +129,10 @@ async function handleUnlock() {
     // l'event 'unlock_cart' est dans events/user.js
 
     // Enregistrer le chariot actif dans le store
-    store.setActiveCart(cartId.value.trim())
+    store.setActiveCart(cartId.value.trim())  // activeCartId.value = cartId
 
-    // S'abonner aux données du chariot (Observers WebSocket)
-    onCartStatus((status) => store.updateStatus(status))
+    // S'abonner aux données du chariot (Observers WebSocket) envoyé par le serveur et mettre à jour le store PINIA ==> MAJ AUTO de cartStatus et alert
+    onCartStatus((status) => store.updateStatus(status))    // onCartStatus() dans api/socket.js : socket.on('cart_status', callback) => MAJ du store : cartStatus.value = status
     onAlert((alert) => store.addAlert(alert))
 
     // Naviguer vers l'écran de suivi

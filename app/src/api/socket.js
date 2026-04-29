@@ -42,15 +42,15 @@ export function stopCart() {  //appelé dans TrackingView.vue par handleStopCart
 // --- Écouter les events (retourne une fonction pour se désabonner) ---
 
 export function onCartStatus(callback) {  //appelé dans ScanView.vue 
-  socket.on('cart_status', callback)
-  return () => socket.off('cart_status', callback)
+  socket.on('cart_status', callback)      // on s'ABONNE à l'event 'cart_status' envoyé par le serveur (dans events/user.js) pour recevoir les mises à jour du chariot assigné à l'utilisateur (position, capteurs, etc) et MAJ du store : cartStatus.value = status
+  return () => socket.off('cart_status', callback) 
 } // ecoute les data envoyé par le simulate-cart.js
 
 
 
 export function onAlert(callback) { //appelé dans ScanView.vue 
   socket.on('alert', callback)
-  return () => socket.off('alert', callback)
+  return () => socket.off('alert', callback)  //.off = se désabonner de l'event 'cart_status' pour éviter les fuites de mémoire et les mises à jour indésirables quand le composant est démonté ou que l'utilisateur change de chariot
 }
 
 export function onConnected(callback) { //appelé dans ScanView.vue 

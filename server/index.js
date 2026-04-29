@@ -11,7 +11,7 @@ const app = express()
 app.use(cors({ origin: 'http://localhost:5173' }))
 app.use(express.json())
 
-const SECRET      = process.env.JWT_SECRET   || 'dev-secret'
+const SECRET      = process.env.JWT_SECRET   || 'dev-secret'    // .env ???
 const CART_SECRET = process.env.CART_SECRET  || 'cart-dev-secret'
 
 // Route de login — vérifie l'utilisateur en base et retourne un JWT

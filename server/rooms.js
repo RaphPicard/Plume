@@ -4,6 +4,10 @@
 //   - suivi des membres en mémoire (carts connectés, utilisateurs assignés)
 //   - helpers d'émission
 
+
+// Les différents types de rooms sont définis par des fonctions (cartRoom(cartId), userRoom(cartId)) ou des getters (allCartsRoom, allAdminsRoom) pour éviter les erreurs de nommage (typos) 
+// et avoir une source de vérité unique pour les noms de rooms. Par exemple, la room d'un chariot spécifique s'appelle toujours "cart:<cartId>" et la room globale des admins s'appelle toujours "admins".
+
 class RoomManager {
   constructor(io) {
     this.io = io
