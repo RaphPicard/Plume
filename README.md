@@ -133,7 +133,7 @@ Il crée les tables `users` et `carts` et insère les chariots C-001, C-002, C-0
 
 ```bash
 npm install
-node server/seed-users.js
+node server/seed-users.js // npm run seed
 ```
 
 Insère `raphou` (admin) et `evan` (user) avec leurs mots de passe hashés via bcrypt.
