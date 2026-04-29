@@ -116,7 +116,13 @@ Port : 5432 LANCER
 
 Télécharger sur [docker.com](https://www.docker.com/products/docker-desktop/) et le lancer.
 
-### 2. Démarrer PostgreSQL + Redis
+### 2. Configurer les variables d'environnement
+
+Vérifier que le fichier `.env` à la racine contient les bonnes valeurs (les valeurs par défaut fonctionnent en dev local).
+
+> `server/load-env.js` charge automatiquement le `.env` au démarrage de chaque script Node — aucun flag ni commande spéciale n'est nécessaire.
+
+### 3. Démarrer PostgreSQL + Redis
 
 ```bash
 docker compose up -d
@@ -124,21 +130,21 @@ docker compose up -d
 
 Lance les deux bases en arrière-plan. Les données PostgreSQL sont persistantes (volume Docker).
 
-### 3. Initialisation automatique de la base
+### 4. Initialisation automatique de la base
 
 Le schéma [server/schema.sql](server/schema.sql) est exécuté automatiquement au premier démarrage de PostgreSQL via `docker-compose.yml`.
 Il crée les tables `users` et `carts` et insère les chariots C-001, C-002, C-042.
 
-### 4. Installer les dépendances Node et insérer les utilisateurs
+### 5. Installer les dépendances Node et insérer les utilisateurs
 
 ```bash
 npm install
-node server/seed-users.js // npm run seed
+node server/seed-users.js
 ```
 
 Insère `raphou` (admin) et `evan` (user) avec leurs mots de passe hashés via bcrypt.
 
-### 5. Rajouter l'interface pgAdmin
+### 6. Rajouter l'interface pgAdmin (optionnel)
 
 ```bash
 docker compose up -d pgadmin
