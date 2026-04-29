@@ -4,15 +4,25 @@ import ScanView     from '../views/ScanView.vue'
 import TrackingView from '../views/TrackingView.vue'
 import AdminView    from '../views/AdminView.vue'
 import AdminLoginView from '../views/AdminLoginView.vue'
+import AdminCartSelectView from '../views/AdminCartSelectView.vue'
 import { connectSocket } from '../api/socket'
 import { clearAdminSession, getAdminSession } from '../api/adminAuth'
+import { getAdminSelectedCart } from '../api/adminCartSelection'
 
 const routes = [
   { path: '/',         component: ScanView },
   { path: '/tracking', component: TrackingView },
   { path: '/admin', component: AdminLoginView },
   { path: '/admin/login', redirect: '/admin' },
-  { path: '/admin/dashboard', component: AdminView, meta: { requiresAdmin: true } },
+  { path: '/admin/select-cart', component: AdminCartSelectView, meta: { requiresAdmin: true } },
+  { path: '/admin/dashboard/:cartId', component: AdminView, meta: { requiresAdmin: true } },
+  {
+    path: '/admin/dashboard',
+    redirect: () => {
+      const selectedCart = getAdminSelectedCart()
+      return selectedCart ? `/admin/dashboard/${selectedCart}` : '/admin/select-cart'
+    },
+  },
 ]
 
 const router = createRouter({
@@ -26,7 +36,7 @@ router.beforeEach(async (to) => {
     if (session) {
       try {
         await connectSocket(session.token)
-        return '/admin/dashboard'
+        return '/admin/select-cart'
       } catch {
         clearAdminSession()
       }

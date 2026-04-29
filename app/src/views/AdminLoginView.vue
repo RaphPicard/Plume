@@ -36,7 +36,7 @@ onMounted(async () => {
 
   try {
     await connectSocket(session.token)
-    router.replace('/admin/dashboard')
+    router.replace('/admin/select-cart')
   } catch {
     clearAdminSession()
   }
@@ -63,7 +63,7 @@ async function handleLogin() {
 
     saveAdminSession(token)
     await connectSocket(token)
-    router.replace('/admin/dashboard')
+    router.replace('/admin/select-cart')
   } catch (err) {
     clearAdminSession()
     error.value = err.message

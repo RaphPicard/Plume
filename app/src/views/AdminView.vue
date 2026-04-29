@@ -1,20 +1,18 @@
 <!-- src/views/AdminView.vue -->
-<!-- Dashboard admin : supervision de la flotte, données capteurs temps réel, commandes -->
 <template>
   <div class="admin-screen">
-
     <header class="admin-header">
       <span class="logo">AUTOCART</span>
-      <h1>Dashboard Admin</h1>
+      <h1>Dashboard Admin - {{ cartId }}</h1>
       <span class="badge-admin">Administrateur</span>
+      <button class="change-cart-btn" type="button" @click="changeCart">Changer de chariot</button>
       <button class="logout-btn" type="button" @click="logoutAdmin">Déconnexion</button>
     </header>
 
-    <!-- Chargement initial -->
     <div class="loading" v-if="loading">Chargement de la flotte...</div>
 
     <template v-else>
-      <div class="admin-content">
+      <div class="admin-content" v-if="selectedCart">
         <section class="video-panel">
           <div class="video-panel-header">
             <h2>Flux vidéo</h2>
@@ -48,88 +46,73 @@
           </div>
         </section>
 
-        <!-- Grille des chariots -->
-        <div class="fleet-grid">
-        <div
-          class="cart-card"
-          v-for="cart in store.fleet"
-          :key="cart.cartId"
-          :class="{ online: cart.online, 'in-use': cart.status === 'in_use' }"
-        >
-          <!-- En-tête de la carte -->
-          <div class="cart-card-header">
-            <span class="cart-name">{{ cart.cartId }}</span>
-            <span class="status-dot" :class="cart.online ? 'online' : 'offline'"></span>
-          </div>
-
-          <!-- Statut -->
-          <div class="cart-status-line">
-            <span class="status-text">{{ statusLabel(cart) }}</span>
-            <span class="owner" v-if="cart.ownerId">👤 {{ cart.ownerId }}</span>
-          </div>
-
-          <!-- Métriques capteurs (si données disponibles) -->
-          <div class="metrics" v-if="store.sensorData[cart.cartId]">
-            <div class="metric">
-              <span class="val">{{ store.sensorData[cart.cartId].weightKg ?? '—' }} kg</span>
-              <span class="lbl">Charge</span>
+        <div class="fleet-grid single-card-layout">
+          <div class="cart-card" :class="{ online: selectedCart.online, 'in-use': selectedCart.status === 'in_use' }">
+            <div class="cart-card-header">
+              <span class="cart-name">{{ selectedCart.cartId }}</span>
+              <span class="status-dot" :class="selectedCart.online ? 'online' : 'offline'"></span>
             </div>
-            <div class="metric">
-              <span class="val">{{ store.sensorData[cart.cartId].batteryPct ?? '—' }}%</span>
-              <span class="lbl">Batterie</span>
-            </div>
-            <div class="metric">
-              <span class="val">{{ store.sensorData[cart.cartId].speedMs ?? '—' }} m/s</span>
-              <span class="lbl">Vitesse</span>
-            </div>
-          </div>
-          <div class="metrics-empty" v-else>Aucune donnée capteur</div>
 
-          <!-- Position (si disponible) -->
-          <div class="position" v-if="store.positions[cart.cartId]">
-            📍 x={{ store.positions[cart.cartId].x }}, y={{ store.positions[cart.cartId].y }}
-          </div>
+            <div class="cart-status-line">
+              <span class="status-text">{{ statusLabel(selectedCart) }}</span>
+              <span class="owner" v-if="selectedCart.ownerId">👤 {{ selectedCart.ownerId }}</span>
+            </div>
 
-          <!-- Commandes admin -->
-          <div class="cart-controls" v-if="cart.online">
-            <!-- Déplacement directionnel -->
-            <div class="direction-pad">
-              <button class="dir-btn" @click="move(cart.cartId, 'forward')">▲</button>  
-              <div class="dir-row">
-                <button class="dir-btn" @click="move(cart.cartId, 'left')">◀</button>
-                <button class="dir-btn stop" @click="move(cart.cartId, 'stop')">■</button>
-                <button class="dir-btn" @click="move(cart.cartId, 'right')">▶</button>
+            <div class="metrics" v-if="selectedSensorData">
+              <div class="metric">
+                <span class="val">{{ selectedSensorData.weightKg ?? '—' }} kg</span>
+                <span class="lbl">Charge</span>
               </div>
-              <button class="dir-btn" @click="move(cart.cartId, 'backward')">▼</button>
+              <div class="metric">
+                <span class="val">{{ selectedSensorData.batteryPct ?? '—' }}%</span>
+                <span class="lbl">Batterie</span>
+              </div>
+              <div class="metric">
+                <span class="val">{{ selectedSensorData.speedMs ?? '—' }} m/s</span>
+                <span class="lbl">Vitesse</span>
+              </div>
+            </div>
+            <div class="metrics-empty" v-else>Aucune donnée capteur</div>
+
+            <div class="position" v-if="selectedPosition">
+              📍 x={{ selectedPosition.x }}, y={{ selectedPosition.y }}
             </div>
 
-            <!-- Actions rapides -->
-            <div class="quick-actions">
-              <button class="action-btn recall" @click="recall(cart.cartId)">
-                ↩ Rappel
-              </button>
-              <button class="action-btn force-stop" @click="forceStop(cart.cartId)">
-                ⛔ Arrêt forcé
-              </button>
+            <div class="cart-controls" v-if="selectedCart.online">
+              <div class="direction-pad">
+                <button class="dir-btn" @click="move(selectedCart.cartId, 'forward')">▲</button>
+                <div class="dir-row">
+                  <button class="dir-btn" @click="move(selectedCart.cartId, 'left')">◀</button>
+                  <button class="dir-btn stop" @click="move(selectedCart.cartId, 'stop')">■</button>
+                  <button class="dir-btn" @click="move(selectedCart.cartId, 'right')">▶</button>
+                </div>
+                <button class="dir-btn" @click="move(selectedCart.cartId, 'backward')">▼</button>
+              </div>
+
+              <div class="quick-actions">
+                <button class="action-btn recall" @click="recall(selectedCart.cartId)">
+                  ↩ Rappel
+                </button>
+                <button class="action-btn force-stop" @click="forceStop(selectedCart.cartId)">
+                  ⛔ Arrêt forcé
+                </button>
+              </div>
             </div>
+            <div class="offline-msg" v-else>Chariot hors ligne</div>
           </div>
-          <div class="offline-msg" v-else>Chariot hors ligne</div>
-        </div>
-
-        <!-- Aucun chariot -->
-        <div class="empty-fleet" v-if="store.fleet.length === 0">
-          Aucun chariot enregistré.
-        </div>
         </div>
       </div>
-    </template>
 
+      <div class="empty-fleet" v-else>
+        Chariot introuvable.
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup>
 import { computed, ref, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useCartStore } from '../store/cart'
 import {
   getFleet,
@@ -142,12 +125,19 @@ import {
   onCartPosition,
   disconnectSocket,
 } from '../api/socket'
+import { clearAdminSelectedCart } from '../api/adminCartSelection'
 import { clearAdminSession } from '../api/adminAuth'
 
-const store   = useCartStore()
+const store = useCartStore()
 const router = useRouter()
+const route = useRoute()
 const loading = ref(true)
 const selectedStream = ref('raw')
+
+const cartId = computed(() => String(route.params.cartId ?? ''))
+const selectedCart = computed(() => store.fleet.find(cart => cart.cartId === cartId.value) ?? null)
+const selectedSensorData = computed(() => store.sensorData[cartId.value])
+const selectedPosition = computed(() => store.positions[cartId.value])
 
 const STREAM_URLS = {
   raw: 'http://192.168.1.10:5500/stream/raw',
@@ -156,19 +146,16 @@ const STREAM_URLS = {
 
 const currentStreamUrl = computed(() => STREAM_URLS[selectedStream.value])
 
-// Désabonnements à nettoyer
 let unsubOnline, unsubOffline, unsubSensor, unsubPosition
 
 onMounted(async () => {
-  // Charger la liste initiale des chariots
   const carts = await getFleet()
   store.setFleet(carts)
   loading.value = false
 
-  // S'abonner aux événements temps réel
-  unsubOnline   = onCartOnline((data)   => store.setCartOnline(data.cartId))
-  unsubOffline  = onCartOffline((data)  => store.setCartOffline(data.cartId))
-  unsubSensor   = onSensorUpdate((data) => store.updateSensorData(data))
+  unsubOnline = onCartOnline((data) => store.setCartOnline(data.cartId))
+  unsubOffline = onCartOffline((data) => store.setCartOffline(data.cartId))
+  unsubSensor = onSensorUpdate((data) => store.updateSensorData(data))
   unsubPosition = onCartPosition((data) => store.updatePosition(data))
 })
 
@@ -179,26 +166,29 @@ onUnmounted(() => {
   unsubPosition?.()
 })
 
-// --- Commandes ---
 function forceStop(cartId) {
   adminForceStop(cartId)
 }
 
 function move(cartId, direction) {
-  adminMove(cartId, direction)    // api/socket.js : socket.emit('admin_move', { cartId, direction }, callback)
+  adminMove(cartId, direction)
 }
 
 function recall(cartId) {
   adminRecall(cartId)
 }
 
+function changeCart() {
+  router.push('/admin/select-cart')
+}
+
 function logoutAdmin() {
+  clearAdminSelectedCart()
   clearAdminSession()
   disconnectSocket()
   router.replace('/admin')
 }
 
-// --- Helpers ---
 function statusLabel(cart) {
   if (!cart.online) return 'Hors ligne'
   if (cart.status === 'in_use') return 'En cours d\'utilisation'
@@ -222,19 +212,25 @@ function statusLabel(cart) {
   margin-bottom: 28px;
 }
 
+.change-cart-btn,
 .logout-btn {
-  margin-left: auto;
   width: auto;
   padding: 10px 14px;
-  background: rgba(248, 113, 113, 0.12);
-  border: 1px solid rgba(248, 113, 113, 0.28);
-  color: #fca5a5;
   border-radius: 12px;
   cursor: pointer;
 }
 
-.logout-btn:hover {
-  background: rgba(248, 113, 113, 0.18);
+.change-cart-btn {
+  margin-left: auto;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #fff;
+}
+
+.logout-btn {
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  color: #fca5a5;
 }
 
 .logo {
@@ -260,6 +256,12 @@ h1 { font-size: 22px; margin: 0; flex: 1; }
   padding: 60px;
 }
 
+.admin-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
 .video-panel {
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(255,255,255,0.1);
@@ -268,12 +270,6 @@ h1 { font-size: 22px; margin: 0; flex: 1; }
   margin-bottom: 18px;
   width: 640px;
   flex: 0 0 640px;
-}
-
-.admin-content {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
 }
 
 .video-panel-header {
@@ -327,23 +323,16 @@ h1 { font-size: 22px; margin: 0; flex: 1; }
   border: 0;
 }
 
-@media (max-width: 760px) {
-  .video-panel-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .video-frame {
-    height: 100%;
-  }
-}
-
 .fleet-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 16px;
   flex: 1;
   align-content: start;
+}
+
+.single-card-layout {
+  grid-template-columns: minmax(300px, 1fr);
 }
 
 .cart-card {
@@ -502,7 +491,6 @@ h1 { font-size: 22px; margin: 0; flex: 1; }
   color: rgba(255,255,255,0.3);
   text-align: center;
   padding: 60px;
-  grid-column: 1 / -1;
 }
 
 @media (max-width: 1200px) {
