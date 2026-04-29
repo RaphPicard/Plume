@@ -43,10 +43,7 @@ npm install socket.io    # WebSocket
 npm install jsonwebtoken # JWT
 npm install express      # Serveur HTTP pour la route /login
 
-### 5. Créer le fichier principal
-touch server/index.js
-
-### 6. Lancer le serveur
+### 5. Lancer le serveur
 node server/index.js
 
 
@@ -74,7 +71,15 @@ npm run dev
 ---
 ---
 
-# LANCER
+#
+```bash
+docker compose up -d pgadmin
+```
+ Add New Server →
+
+Name : plume
+Host : postgres (nom du service Docker, pas localhost)
+Port : 5432 LANCER
 
 ## Première installation (une seule fois)
 
@@ -103,14 +108,6 @@ node server/seed-users.js
 Insère `raphou` (admin) et `evan` (user) avec leurs mots de passe hashés via bcrypt.
 
 ### 5. Rajouter l'interface pgAdmin
-```bash
-docker compose up -d pgadmin
-```
- Add New Server →
-
-Name : plume
-Host : postgres (nom du service Docker, pas localhost)
-Port : 5432
 Username : postgres
 Password : (laisser vide)
 
