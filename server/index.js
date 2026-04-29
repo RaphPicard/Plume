@@ -11,8 +11,9 @@ const app = express()
 app.use(cors({ origin: 'http://localhost:5173' }))
 app.use(express.json())
 
-const SECRET      = process.env.JWT_SECRET   || 'dev-secret'    // .env ???
-const CART_SECRET = process.env.CART_SECRET  || 'cart-dev-secret'
+const SECRET      = process.env.JWT_SECRET
+const CART_SECRET = process.env.CART_SECRET
+if (!SECRET || !CART_SECRET) throw new Error('[server] JWT_SECRET et CART_SECRET doivent être définis dans .env')
 
 function createGuestUserId() {
   return `guest-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`

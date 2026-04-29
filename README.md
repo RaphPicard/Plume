@@ -251,31 +251,30 @@ npm start
 
 
 # TODO IMPORTANT RAPHOUMAN
-- COMMANDES : 
-   - A stocker dans 3 listes dans le JSON : `ACKcmd[id]` et `execCmd[id]` et (pour différencier les commandes en attente et celles exécutées). Et `SkipCmd[id]` pour les commandes ignorées (pour les ignorer, suite à un ordre de priorité)
 
-- JSON envoyé du serveur au raspberry doit se faire toutes les X ms et doit contenir les données suivantes: 
+- COMMANDES :
+   - A stocker dans 3 listes dans le JSON : `ACKcmd[id]` et `execCmd[id]` (pour différencier les commandes en attente et celles exécutées) et `SkipCmd[id]` pour les commandes ignorées (suite à un ordre de priorité)
+
+---
+
+### ✅ FAIT — Flush batch vers le Raspberry (avril 2026)
+
+- Le serveur accumule les commandes et alertes **immédiatement** dans une file par chariot.
+- Toutes les **1000 ms** (configurable via `CART_FLUSH_MS` en variable d'env), le serveur envoie le batch JSON sur la room Socket.IO dédiée `cart:<cartId>` via l'event `cmd`.
+
+Format envoyé au Raspberry :
 ```json
 {
   "cartId": "C-001",
-  "status": "available/paired/locked",
-  "alerts": ["low_battery", "obstacle_detected"],
+  "status": "available | paired",
+  "alerts": ["obstacle_detected", "forced_stop"],
   "cmds": [
-    {
-      "id": "cmd-123",
-      "action": "move",
-      "args": ["left/right/forward/backward"]
-    }, 
-    {
-      "id": "cmd-124",
-      "action": "stop",
-      "args": []
-    },
-    {
-      "id": "cmd-125",
-      "action": "return_to_base",
-      "args": []
-    }
+    { "id": "cmd-<uuid>", "action": "move",           "args": ["forward"] },
+    { "id": "cmd-<uuid>", "action": "stop",           "args": [] },
+    { "id": "cmd-<uuid>", "action": "return_to_base", "args": [] },
+    { "id": "cmd-<uuid>", "action": "start_tracking", "args": [] }
   ]
 }
 ```
+
+Fichiers modifiés : `server/rooms.js`, `server/events/admin.js`, `server/events/user.js`, `server/events/cart.js`

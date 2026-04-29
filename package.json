@@ -4,7 +4,10 @@
   "description": "Par  : Picard Raphaël 4 ETI CLBD Lieu : CPE LYON date : Avril 2026 Codé en : Vue, NodeJS ...",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start":    "node --env-file=.env server/index.js",
+    "simulate": "node --env-file=.env server/simulate-cart.js",
+    "seed":     "node --env-file=.env server/seed-users.js",
+    "test":     "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",

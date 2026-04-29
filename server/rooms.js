@@ -3,10 +3,16 @@
 //   - nommage des rooms (une seule source de vérité)
 //   - suivi des membres en mémoire (carts connectés, utilisateurs assignés)
 //   - helpers d'émission
+//   - file de commandes par chariot, flushée toutes les FLUSH_INTERVAL_MS
 
 
-// Les différents types de rooms sont définis par des fonctions (cartRoom(cartId), userRoom(cartId)) ou des getters (allCartsRoom, allAdminsRoom) pour éviter les erreurs de nommage (typos) 
+// Les différents types de rooms sont définis par des fonctions (cartRoom(cartId), userRoom(cartId)) ou des getters (allCartsRoom, allAdminsRoom) pour éviter les erreurs de nommage (typos)
 // et avoir une source de vérité unique pour les noms de rooms. Par exemple, la room d'un chariot spécifique s'appelle toujours "cart:<cartId>" et la room globale des admins s'appelle toujours "admins".
+
+const { randomUUID } = require('crypto')  // pour générer des IDs uniques pour les commandes (utile pour le suivi ACK/exec côté chariot)
+
+const FLUSH_INTERVAL_MS = Number(process.env.CART_FLUSH_MS)  // intervalle de flush des commandes et alertes aux chariots (en ms) ; à ajuster selon les besoins (ex: 100ms pour une réactivité optimale, 500ms pour réduire la charge serveur)
+if (!FLUSH_INTERVAL_MS) throw new Error('[rooms] CART_FLUSH_MS doit être défini dans .env')
 
 class RoomManager {
   constructor(io) {
@@ -17,6 +23,17 @@ class RoomManager {
 
     // cartId → userId actuellement assigné
     this._cartUsers = new Map()
+
+    // cartId → 'available' | 'paired'  (état en mémoire, évite une lecture Redis à chaque flush)
+    this._cartStatus = new Map()
+
+    // cartId → [{id, action, args}]  commandes en attente d'envoi
+    this._cmdQueues = new Map()
+
+    // cartId → [string]  alertes en attente d'envoi
+    this._alertQueues = new Map()
+
+    this._flushTimer = setInterval(() => this._flushAll(), FLUSH_INTERVAL_MS)
   }
 
   // ── Noms des rooms (source de vérité unique) ────────────────────────────────
@@ -29,15 +46,23 @@ class RoomManager {
   // ── Chariots ────────────────────────────────────────────────────────────────
 
   registerCart(socket, cartId) {
-    socket.join(this.cartRoom(cartId))  //rej sa propre room
-    socket.join(this.allCartsRoom)    //rej la room globale des chariots (pour les admins)
+    socket.join(this.cartRoom(cartId))
+    socket.join(this.allCartsRoom)
     this._cartSockets.set(cartId, socket)
-    this.io.to(this.allAdminsRoom).emit('cart_online', { cartId, timestamp: Date.now() }) //notif admins qu'un chariot est en ligne
+
+    this._cmdQueues.set(cartId, []) // initialiser la file de commandes vide pour ce chariot
+    this._alertQueues.set(cartId, [])
+    if (!this._cartStatus.has(cartId)) this._cartStatus.set(cartId, 'available')
+
+    this.io.to(this.allAdminsRoom).emit('cart_online', { cartId, timestamp: Date.now() })
   }
 
   unregisterCart(cartId) {
     this._cartSockets.delete(cartId)
     this._cartUsers.delete(cartId)
+
+    this._cmdQueues.delete(cartId)  // nettoyer la file de commandes et d'alertes pour ce chariot
+    this._alertQueues.delete(cartId)
     this.io.to(this.allAdminsRoom).emit('cart_offline', { cartId })
   }
 
@@ -67,10 +92,58 @@ class RoomManager {
     socket.join(this.allAdminsRoom)
   }
 
-  // ── Helpers d'émission ──────────────────────────────────────────────────────
 
-  toCart(cartId, event, data)   { this.io.to(this.cartRoom(cartId)).emit(event, data) }
-  toUser(cartId, event, data)   { this.io.to(this.userRoom(cartId)).emit(event, data) }
+
+
+
+
+  // ── File de commandes ───────────────────────────────────────────────────────
+
+  // Ajoute une commande dans la file du chariot (émission différée au prochain flush)
+  enqueueCmd(cartId, action, args = []) {
+    if (!this._cmdQueues.has(cartId)) this._cmdQueues.set(cartId, [])
+    this._cmdQueues.get(cartId).push({ id: `cmd-${randomUUID()}`, action, args })
+  }
+
+  // Ajoute une alerte dans la file du chariot
+  enqueueAlert(cartId, alertType) { // va au chariot et à l'utilisateur (via la room user_of:cartId) ; les alertes sont aussi envoyées aux admins via le flush global
+    if (!this._alertQueues.has(cartId)) this._alertQueues.set(cartId, [])
+    const queue = this._alertQueues.get(cartId)
+    if (!queue.includes(alertType)) queue.push(alertType) // pas de doublon dans le même tick
+  }
+
+  // Met à jour le statut en mémoire (appelé par les events user)
+  setCartStatus(cartId, status) {
+    this._cartStatus.set(cartId, status)
+  }
+
+  // ── Flush ───────────────────────────────────────────────────────────────────
+
+  // Appelé toutes les FLUSH_INTERVAL_MS : envoie le batch JSON à chaque chariot connecté
+  _flushAll() {
+    for (const cartId of this._cartSockets.keys()) {
+      const cmds   = this._cmdQueues.get(cartId)   ?? []
+      const alerts = this._alertQueues.get(cartId) ?? []
+
+      this.io.to(this.cartRoom(cartId)).emit('cmd', {     //envoie des données à la room du chariot (cartId) ; le chariot doit être abonné à cette room pour recevoir les commandes et alertes qui lui sont destinées
+        cartId,
+        status: this._cartStatus.get(cartId) ?? 'available',
+        alerts,
+        cmds,
+      })
+
+      this._cmdQueues.set(cartId, [])
+      this._alertQueues.set(cartId, [])
+    }
+  }
+
+
+
+
+  // ── Helpers d'émission (non-cart) ───────────────────────────────────────────
+
+  // toUser(cartId, event, data)   { this.io.to(this.userRoom(cartId)).emit(event, data) } // remplacer par enqueueCmd ou enqueueAlert pour que les données soient envoyées au prochain flush, et éviter d'envoyer plusieurs messages au même chariot dans le même tick (ex: alert + cmd)
+  toUser(cartId, event, data)   { this.io.to(this.userRoom(cartId)).emit(event, data) } // va à l'app mobile
   toAdmins(event, data)         { this.io.to(this.allAdminsRoom).emit(event, data) }
 }
 

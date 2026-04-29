@@ -9,11 +9,15 @@ const { Pool } = require('pg')
 const bcrypt   = require('bcryptjs')
 
 const pg = new Pool({
-  host:     process.env.PG_HOST     || 'localhost',
-  database: process.env.PG_DB       || 'plume',
-  user:     process.env.PG_USER     || 'postgres',
-  password: process.env.PG_PASSWORD || '',
+  host:     process.env.PG_HOST,
+  database: process.env.PG_DB,
+  user:     process.env.PG_USER,
+  password: process.env.PG_PASSWORD,
 })
+
+if (!process.env.PG_HOST || !process.env.PG_DB || !process.env.PG_USER || !process.env.PG_PASSWORD) {
+  throw new Error('[seed-users] PG_HOST, PG_DB, PG_USER et PG_PASSWORD doivent être définis dans .env')
+}
 
 const USERS = [
   { username: 'raphou', password: 'raphou', role: 'admin' },

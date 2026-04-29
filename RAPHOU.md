@@ -446,6 +446,15 @@ Le Raspberry Pi gère déjà la reconnexion automatique avec backoff exponentiel
 | `cart_offline` | Serveur → Admin | — | `{ cartId }` |
 | `cart_position` | Serveur → Admin | — | `{ cartId, x, y }` |
 
+
+| Room | Nom réel | Membres | Utilisée pour |
+|---|---|---|---|
+| `cartRoom(cartId)` | `cart:C-001` | Le Raspberry de ce chariot | Envoyer les cmd à un chariot précis |
+| `allCartsRoom` | `carts` | Tous les Raspberrys connectés | Broadcast global (non utilisé actuellement) |
+| `userRoom(cartId)` | `user_of:C-001` | L'utilisateur assigné au chariot | Envoyer `cart_status`, `alert` à l'utilisateur |
+| `allAdminsRoom` | `admins` | Tous les admins connectés | Envoyer `cart_online`, `cart_offline`, `sensor_update`, `cart_position`, `alert` aux admins |
+
+
 ---
 
 ## Lancer le projet

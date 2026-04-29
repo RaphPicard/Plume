@@ -18,21 +18,29 @@ const Redis    = require('ioredis')
 
 // ── PostgreSQL ────────────────────────────────────────────────────────────────
 const pg = new Pool({
-  host:     process.env.PG_HOST     || 'localhost',
-  port:     Number(process.env.PG_PORT) || 5432,
-  database: process.env.PG_DB       || 'plume',
-  user:     process.env.PG_USER     || 'postgres',
-  password: process.env.PG_PASSWORD || '',
+  host:     process.env.PG_HOST,
+  port:     Number(process.env.PG_PORT),
+  database: process.env.PG_DB,
+  user:     process.env.PG_USER,
+  password: process.env.PG_PASSWORD,
 })
 
 // ── Redis ─────────────────────────────────────────────────────────────────────
 const redis = new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: Number(process.env.REDIS_PORT) || 6379,
+  host: process.env.REDIS_HOST,
+  port: Number(process.env.REDIS_PORT),
 })
 
 redis.on('error', (err) => console.error('[Redis]', err.message))
 pg.on('error',   (err) => console.error('[PG]',    err.message))
+
+if (!process.env.PG_HOST || !process.env.PG_PORT || !process.env.PG_DB || !process.env.PG_USER) {
+  throw new Error('[db] Les variables d\'environnement PG_HOST, PG_PORT, PG_DB, PG_USER (et idéalement PG_PASSWORD) doivent être définies')
+}
+if (!process.env.REDIS_HOST || !process.env.REDIS_PORT) {
+  throw new Error('[db] Les variables d\'environnement REDIS_HOST et REDIS_PORT doivent être définies')
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Chariots  (état temps-réel dans Redis)

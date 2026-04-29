@@ -2,7 +2,8 @@
 // server/auth.js
 
 const jwt = require('jsonwebtoken');
-const SECRET = process.env.JWT_SECRET || 'dev-secret';
+const SECRET = process.env.JWT_SECRET;
+if (!SECRET) throw new Error('[auth] JWT_SECRET manquant — définir dans .env');
 
 function authMiddleware(socket, next) {
   const token = socket.handshake.auth.token;

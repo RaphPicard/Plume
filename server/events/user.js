@@ -19,7 +19,8 @@ function registerUserEvents(io, socket, rooms) {
       rooms.assignUser(socket, cartId, userId);
       socket.data.activeCartId = cartId;    // stocker le cartId actif dans socket.data pour pouvoir le libérer en cas de déconnexion
 
-      rooms.toCart(cartId, 'cmd', { action: 'start_tracking' });
+      rooms.setCartStatus(cartId, 'paired');
+      rooms.enqueueCmd(cartId, 'start_tracking', []); //enqueueCmd pour que le chariot commence à envoyer les données capteurs au prochain flush
 
       callback({ ok: true, cartId });
     } catch (err) {
@@ -37,7 +38,8 @@ function registerUserEvents(io, socket, rooms) {
     rooms.releaseUser(socket, cartId);
     socket.data.activeCartId = null;
 
-    rooms.toCart(cartId, 'cmd', { action: 'stop_tracking' });
+    rooms.setCartStatus(cartId, 'available');
+    rooms.enqueueCmd(cartId, 'stop_tracking', []);
 
     callback({ ok: true });
   });
@@ -47,7 +49,8 @@ function registerUserEvents(io, socket, rooms) {
     const cartId = socket.data.activeCartId;
     if (cartId) {
       await clearCartOwner(cartId);
-      rooms.toCart(cartId, 'cmd', { action: 'stop_tracking' });
+      rooms.setCartStatus(cartId, 'available');
+      rooms.enqueueCmd(cartId, 'stop_tracking', []);
     }
   });
 }

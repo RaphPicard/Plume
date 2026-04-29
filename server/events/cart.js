@@ -11,7 +11,8 @@ function registerCartEvents(io, socket, rooms) {    // appelé dans server.js lo
   const { getCartState } = require('../db');
   getCartState(cartId).then((state) => {
     if (state?.ownerId) {
-      socket.emit('cmd', { action: 'start_tracking' });
+      rooms.setCartStatus(cartId, 'paired');
+      rooms.enqueueCmd(cartId, 'start_tracking', []);
     }
   });
 
@@ -32,7 +33,8 @@ function registerCartEvents(io, socket, rooms) {    // appelé dans server.js lo
     rooms.toUser(cartId, 'alert', { type: 'obstacle', severity });
 
     if (severity === 'critical') {
-      socket.emit('cmd', { action: 'stop' });
+      rooms.enqueueAlert(cartId, 'obstacle_detected');
+      rooms.enqueueCmd(cartId, 'stop', []);
     }
   });
 

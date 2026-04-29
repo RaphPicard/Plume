@@ -8,18 +8,19 @@ function registerAdminEvents(io, socket, rooms) {
 
   // --- Commande de déplacement manuel ---
   socket.on('admin:move', ({ cartId, direction }) => {
-    rooms.toCart(cartId, 'cmd', { action: 'move', direction });
+    rooms.enqueueCmd(cartId, 'move', [direction]);
   });
 
   // --- Arrêt forcé ---
   socket.on('admin:force_stop', ({ cartId }) => {
-    rooms.toCart(cartId, 'cmd', { action: 'stop' });
-    rooms.toUser(cartId, 'alert', { type: 'forced_stop' });
+    rooms.enqueueCmd(cartId, 'stop', []);
+    rooms.enqueueAlert(cartId, 'forced_stop');
+    rooms.toUser(cartId, 'alert', { type: 'forced_stop' }); // notification immédiate vers l'app mobile
   });
 
   // --- Rappel à la base ---
   socket.on('admin:recall', ({ cartId }) => {
-    rooms.toCart(cartId, 'cmd', { action: 'return_to_base' });
+    rooms.enqueueCmd(cartId, 'return_to_base', []);
   });
 
   // --- Demande d'état complet de la flotte ---
