@@ -120,7 +120,7 @@ io.use(authMiddleware); //cette ligne permet d'exécuter le middleware d'authent
 io.on('connection', (socket) => { //a ce stade, le client est déjà authentifié et socket.data contient les infos du token JWT (role, userId, cartId)
   const { role, userId, cartId } = socket.data; // injecté par authMiddleware
 
-  console.log(`[connect] role=${role} userId=${userId}`);
+  console.log(`[connect] role=${role} ${role === 'cart' ? `cartId=${cartId}` : `userId=${userId}`}`);
 
   if (role === 'cart')  registerCartEvents(io, socket, rooms);
   if (role === 'user')  registerUserEvents(io, socket, rooms);
