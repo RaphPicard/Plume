@@ -143,7 +143,7 @@ export function adminForceStop(cartId) {
 
 export function adminMove(cartId, direction) {
   // direction: 'forward' | 'backward' | 'left' | 'right' | 'stop'
-  socket.emit('admin:move', { cartId, direction })  //l'event admin:move est dans events/admin.js, c'est lui qui va envoyer les commandes de mouvement au simulate-cart.js
+  socket.emit('admin:move', { cartId, direction })  //l'event admin:move est dans server/events/admin.js, c'est lui qui va envoyer les commandes de mouvement au simulate-cart.js
 }
 
 export function adminRecall(cartId) {

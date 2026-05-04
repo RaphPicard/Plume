@@ -83,6 +83,13 @@ const httpServer = require('http').createServer(app)
 
 
 
+
+
+
+
+
+
+
 // -----------------------------------------------------------------------------------
 // Point d'entrée du serveur WebSocket (Socket.IO)
 // Configuration du serveur Node.js avec WebSocket
@@ -122,7 +129,7 @@ io.on('connection', (socket) => { //a ce stade, le client est déjà authentifi�
 
   console.log(`[connect] role=${role} ${role === 'cart' ? `cartId=${cartId}` : `userId=${userId}`}`);
 
-  if (role === 'cart')  registerCartEvents(io, socket, rooms);
+  if (role === 'cart')  registerCartEvents(io, socket, rooms); // le raspberry Pi connecté avec le rôle "cart" aura accès aux événements définis dans events/cart.js (envoi des données de capteurs, réception des commandes de contrôle, etc.)
   if (role === 'user')  registerUserEvents(io, socket, rooms);
   if (role === 'admin') { registerAdminEvents(io, socket, rooms); registerUserEvents(io, socket, rooms); }  //on donne aussi accès aux événements "user" pour les admins, pour qu'ils puissent voir les données des chariots et les alertes même s'ils ne sont pas connectés à un chariot spécifique
   // plusieurs handlers d'événements sont possibles simultanément pour un même socket, mais dans notre cas on enregistre les événements en fonction du rôle du client (cart, user ou admin)

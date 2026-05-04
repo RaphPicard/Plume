@@ -19,8 +19,9 @@ async function fetchToken() {
   const res = await fetch(`${SERVER_URL}/cart-token`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ cartId: CART_ID, cartSecret: CART_SECRET }),
+    body:    JSON.stringify({ cartId: CART_ID, cartSecret: CART_SECRET }), // on définit le cart_id du raspberry Pi dans config.js, et on utilise le cartSecret partagé avec le serveur (CART_SECRET dans .env) pour obtenir un token JWT auprès du serveur (server/index.js : route POST /cart-token) en envoyant { cartId, cartSecret } et en recevant { token } si le secret est valide, ou une erreur sinon
   })
+  // reponse donnée par le serveur dans server/index.js : res.json({ token }) ou res.status(401).json({ error: 'Secret invalide' })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(`Impossible d'obtenir le token : ${err.error || res.status}`)
@@ -29,20 +30,26 @@ async function fetchToken() {
   return token
 }
 
+
+
+
+
+
+
 // ── 2. Connexion WebSocket + boucle capteurs ─────────────────────────────────
 
 async function main() {
   let token
   try {
-    token = await fetchToken()
+    token = await fetchToken() 
     console.log(`[auth] Token JWT obtenu pour ${CART_ID}`)
   } catch (err) {
     console.error('[auth]', err.message)
     process.exit(1)
   }
 
-  const socket = io(SERVER_URL, {
-    auth: { token },
+  const socket = io(SERVER_URL, { // avant d'accepter la connexion, le serveur Socket.IO (server/index.js) appelle authMiddleware (server/auth.js) qui vérifie le token et extrait cartId pour authentifier le chariot
+    auth: { token }, // token envoyé dans socket.handshake.auth (server/auth.js : authMiddleware) pour authentifier le chariot auprès du serveur WebSocket
     reconnection:        true,
     reconnectionDelay:   2000,
     reconnectionDelayMax:30000,
@@ -74,39 +81,45 @@ async function main() {
     console.error('[ws] Erreur connexion :', err.message)
   })
 
+  
+  
+  
   // ── Commandes reçues du serveur ─────────────────────────────────────────────
   socket.on('cmd', (cmd) => {
-    console.log('[cmd]', cmd)
-    switch (cmd.action) {
-      case 'start_tracking':
-        tracking = true
-        console.log('→ Suivi démarré')
-        break
+    console.log('Commande reçue :', JSON.stringify(cmd, null, 2))
+    for (const command of cmd.cmds) {
+      switch (command.action) {
+        case 'start_tracking':
+          tracking = true
+          console.log('→ Suivi démarré')
+          break
 
-      case 'stop_tracking':
-      case 'stop':
-        tracking = false
-        speed    = 0
-        stopMotors()
-        break
+        case 'stop_tracking':
+        case 'stop':
+          tracking = false
+          speed    = 0
+          stopMotors()
+          break
 
-      case 'move':
-        if (tracking) move(cmd.direction)
-        break
+        case 'move':
+          if (tracking) move(command.args[0]) // ex: 'forward', 'backward', 'left', 'right'
+          break
 
-      case 'return_to_base':
-        tracking = false
-        speed    = 0
-        returnToBase()
-        break
+        case 'return_to_base':
+          tracking = false
+          speed    = 0
+          returnToBase()
+          break
     }
-  })
+  }
+})
+
 
   // ── Boucle d'envoi des capteurs ─────────────────────────────────────────────
 
   function startSensorLoop() {
     if (sensorTimer) return  // déjà lancée
-    sensorTimer = setInterval(() => {
+    sensorTimer = setInterval(() => { //envoie périodiquement les données de capteurs au serveur tant que le suivi est actif, et gère les alertes (ex: obstacle, batterie faible) en temps réel
       const battery = readBattery()
 
       // Retour automatique à la base si batterie critique
@@ -127,7 +140,7 @@ async function main() {
       }
 
       // Données capteurs → serveur
-      socket.emit('sensor_data', {
+      socket.emit('sensor_data', { // on envoie les sensor_data et position_update au server (server/events/cart.js) qui les relaie aux utilisateurs et admins concernés ; les données de capteurs sont aussi envoyées aux admins via rooms.toAdmins pour qu'ils puissent voir les données de tous les chariots dans le dashboard admin
         weightKg:   readWeight(),
         batteryPct: battery,
         speedMs:    tracking ? speed : 0,
@@ -151,6 +164,8 @@ async function main() {
     }
   }
 }
+
+
 
 // ── 3. Contrôle des moteurs (stubs GPIO) ─────────────────────────────────────
 // Remplacer ces fonctions par les appels GPIO réels (onoff, pigpio, etc.)

@@ -28,7 +28,7 @@ class RoomManager {
     this._cartStatus = new Map()
 
     // cartId → [{id, action, args}]  commandes en attente d'envoi
-    this._cmdQueues = new Map()
+    this._cmdQueues = new Map() // récupérable par le chartId via le flush périodique, et par les admins via l'event 'admin:get_fleet' pour voir les commandes en attente de chaque chariot
 
     // cartId → [string]  alertes en attente d'envoi
     this._alertQueues = new Map()
@@ -45,10 +45,11 @@ class RoomManager {
 
   // ── Chariots ────────────────────────────────────────────────────────────────
 
-  registerCart(socket, cartId) {
-    socket.join(this.cartRoom(cartId))
-    socket.join(this.allCartsRoom)
-    this._cartSockets.set(cartId, socket)
+  registerCart(socket, cartId) { // le raspberry appel cette fonction à sa connexion, pour être enregistré dans la room de son cartId et dans la room globale des chariots, et pour initialiser sa file de commandes et d'alertes
+    socket.join(this.cartRoom(cartId)) // le chariot rejoint sa room dédiée (cart:cartId) pour recevoir les commandes et alertes qui lui sont destinées
+    socket.join(this.allCartsRoom) // le chariot rejoint la room globale des chariots (carts) pour que les admins puissent le voir dans la flotte, même s'ils ne sont pas connectés à un chariot spécifique
+    
+    this._cartSockets.set(cartId, socket) // stocke la socket du chariot pour sle FLUSH périodique
 
     this._cmdQueues.set(cartId, []) // initialiser la file de commandes vide pour ce chariot
     this._alertQueues.set(cartId, [])
@@ -123,11 +124,13 @@ class RoomManager {
   // ── Flush ───────────────────────────────────────────────────────────────────
 
   // Appelé toutes les FLUSH_INTERVAL_MS : envoie le batch JSON à chaque chariot connecté
+  // appelé dans 
   _flushAll() {
     for (const cartId of this._cartSockets.keys()) {
       const cmds   = this._cmdQueues.get(cartId)   ?? []
       const alerts = this._alertQueues.get(cartId) ?? []
 
+      // le chariot/ou n'importe quel client abonné à la room cart:cartId doit éouter l'event 'cmd'
       this.io.to(this.cartRoom(cartId)).emit('cmd', {     //envoie des données à la room du chariot (cartId) ; le chariot doit être abonné à cette room pour recevoir les commandes et alertes qui lui sont destinées
         cartId,
         status: this._cartStatus.get(cartId) ?? 'available',
@@ -135,8 +138,8 @@ class RoomManager {
         cmds,
       })
 
-      this._cmdQueues.set(cartId, [])
-      this._alertQueues.set(cartId, [])
+      this._cmdQueues.set(cartId, []) //vide la file de commandes et d'alertes après l'envoi
+      this._alertQueues.set(cartId, []) 
     }
   }
 

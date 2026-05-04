@@ -7,6 +7,8 @@ const jwt = require('jsonwebtoken');
 const SECRET = process.env.JWT_SECRET;
 if (!SECRET) throw new Error('[auth] JWT_SECRET manquant — définir dans .env');
 
+
+// Middleware d'authentification pour Socket.IO (appelé à chaque connexion WebSocket dans server/index.js)
 function authMiddleware(socket, next) {
   const token = socket.handshake.auth.token;
 
@@ -15,7 +17,7 @@ function authMiddleware(socket, next) {
   try {
     const payload = jwt.verify(token, SECRET);
     // payload contient : { role: 'user'|'admin'|'cart', userId, cartId }
-    socket.data = payload;
+    socket.data = payload; 
     next();
   } catch (err) {
     next(new Error('Invalid token'));

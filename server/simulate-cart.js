@@ -39,6 +39,11 @@ socket.on('connect', () => {
   }, 1000)  // 1000ms = 1x par seconde
 })
 
+
+
+
+
+// ecoute l'event commande pour recevoir les commandes envoyées par les admins 
 socket.on('cmd', (cmd) => {
   console.log('Commande reçue :', JSON.stringify(cmd, null, 2))
 
@@ -46,7 +51,7 @@ socket.on('cmd', (cmd) => {
     switch (command.action) {
       case 'start_tracking':
         tracking = true
-        console.log('→ Suivi démarré')
+        console.log('→ Suivi démarré') 
         break
 
       case 'stop_tracking':
@@ -57,7 +62,7 @@ socket.on('cmd', (cmd) => {
 
       case 'move':
         // Le vrai chariot IoT actionnerait ses moteurs ici
-        console.log(`→ Déplacement : ${command.args[0]}`)
+        console.log(`→ Déplacement : ${command.args[0]}`) // log pour debug, mais avec le RPi : move(direction) actionnera les moteurs du chariot pour le faire avancer dans la direction spécifiée (ex: 'forward', 'backward', 'left', 'right')
         break
 
       case 'return_to_base':
