@@ -56,6 +56,8 @@ export const useCartStore = defineStore('cart', () => {
   function setCartOffline(cartId) {
     const existing = fleet.value.find(c => c.cartId === cartId)
     if (existing) existing.online = false
+    delete sensorData.value[cartId]
+    delete positions.value[cartId]
   }
 
   function updateSensorData(data) {

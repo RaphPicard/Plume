@@ -26,7 +26,7 @@ function registerAdminEvents(io, socket, rooms) {
   // --- Demande d'état complet de la flotte ---
   socket.on('admin:get_fleet', async (_, callback) => {
     const carts = await getAllCarts();
-    callback({ carts });
+    callback({ carts: carts.map(c => ({ ...c, online: rooms._cartSockets.has(c.cartId) })) });
   });
 }
 
