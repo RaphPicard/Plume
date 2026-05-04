@@ -40,28 +40,30 @@ socket.on('connect', () => {
 })
 
 socket.on('cmd', (cmd) => {
-  console.log('Commande reçue :', cmd)
+  console.log('Commande reçue :', JSON.stringify(cmd, null, 2))
 
-  switch (cmd.action) {
-    case 'start_tracking':
-      tracking = true
-      console.log('→ Suivi démarré')
-      break
+  for (const command of cmd.cmds) {
+    switch (command.action) {
+      case 'start_tracking':
+        tracking = true
+        console.log('→ Suivi démarré')
+        break
 
-    case 'stop_tracking':
-    case 'stop':
-      tracking = false
-      console.log('→ Suivi arrêté')
-      break
+      case 'stop_tracking':
+      case 'stop':
+        tracking = false
+        console.log('→ Suivi arrêté')
+        break
 
-    case 'move':
-      // Le vrai chariot IoT actionnerait ses moteurs ici
-      console.log(`→ Déplacement : ${cmd.direction}`)
-      break
+      case 'move':
+        // Le vrai chariot IoT actionnerait ses moteurs ici
+        console.log(`→ Déplacement : ${command.args[0]}`)
+        break
 
-    case 'return_to_base':
-      tracking = false
-      console.log('→ Retour à la base')
-      break
+      case 'return_to_base':
+        tracking = false
+        console.log('→ Retour à la base')
+        break
+    }
   }
 })
