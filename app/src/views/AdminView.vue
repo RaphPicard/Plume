@@ -37,12 +37,11 @@
           </div>
 
           <div class="video-frame-wrap">
-            <iframe
+            <img
               class="video-frame"
               :src="currentStreamUrl"
-              title="Flux vidéo chariot"
-              allowfullscreen
-            ></iframe>
+              alt="Flux vidéo chariot"
+            />
           </div>
         </section>
 
@@ -313,14 +312,12 @@ h1 { font-size: 22px; margin: 0; flex: 1; }
   border: 1px solid rgba(255,255,255,0.12);
   background: #0a0a0c;
   width: min(640px, 100%);
-  aspect-ratio: 4 / 3;
 }
 
 .video-frame {
   display: block;
   width: 100%;
-  height: 100%;
-  border: 0;
+  height: auto;
 }
 
 .fleet-grid {
