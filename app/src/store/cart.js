@@ -7,10 +7,11 @@ import { ref, computed } from 'vue'
 export const useCartStore = defineStore('cart', () => {
 
   // --- État ---
-  const activeCartId   = ref(null)     // null = pas de chariot actif
-  const isConnected    = ref(false)
-  const cartStatus     = ref(null)     // { weightKg, batteryPct, speedMs }
-  const alerts         = ref([])
+  const activeCartId    = ref(null)     // null = pas de chariot actif
+  const isConnected     = ref(false)
+  const cartStatus      = ref(null)     // { weightKg, batteryPct, speedMs, distanceToUser }
+  const alerts          = ref([])
+  const sessionStartTime = ref(null)   // timestamp ms — début de la session active
 
   // --- État admin ---
   const fleet          = ref([])       // [{ cartId, ownerId, status }] — liste complète des chariots
@@ -26,8 +27,13 @@ export const useCartStore = defineStore('cart', () => {
   }
 
   function clearActiveCart() {
-    activeCartId.value = null
-    cartStatus.value   = null
+    activeCartId.value     = null
+    cartStatus.value       = null
+    sessionStartTime.value = null
+  }
+
+  function setSessionStartTime(timestamp) {
+    sessionStartTime.value = timestamp
   }
 
   function updateStatus(status) {
@@ -72,12 +78,12 @@ export const useCartStore = defineStore('cart', () => {
 
   return {
     // état
-    activeCartId, isConnected, cartStatus, alerts,
+    activeCartId, isConnected, cartStatus, alerts, sessionStartTime,
     fleet, sensorData, positions,
     // getters
     hasActiveCart,
     // actions utilisateur
-    setActiveCart, clearActiveCart, updateStatus, addAlert, setConnected,
+    setActiveCart, clearActiveCart, updateStatus, addAlert, setConnected, setSessionStartTime,
     // actions admin
     setFleet, setCartOnline, setCartOffline, updateSensorData, updatePosition,
   }

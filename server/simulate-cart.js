@@ -22,11 +22,12 @@ socket.on('connect', () => {
     //   → sensor_update aux admins toujours
     //   → cart_status à l'utilisateur seulement si un chariot lui est assigné)
     socket.emit('sensor_data', {    //sensor_data récupérable dans cart.js pour être envoyé aux admins et à l'utilisateur assigné
-      weightKg:   (Math.random() * 10).toFixed(1),
-      batteryPct: Math.floor(Math.random() * 100),
-      speedMs:    tracking ? (Math.random() * 2).toFixed(2) : '0.00',  // vitesse nulle si pas de suivi actif
-      accelX:     (Math.random() - 0.5).toFixed(3),
-      accelY:     (Math.random() - 0.5).toFixed(3),
+      weightKg:       (Math.random() * 10).toFixed(1),
+      batteryPct:     Math.floor(Math.random() * 100),
+      speedMs:        tracking ? (Math.random() * 2).toFixed(2) : '0.00',  // vitesse nulle si pas de suivi actif
+      accelX:         (Math.random() - 0.5).toFixed(3),
+      accelY:         (Math.random() - 0.5).toFixed(3),
+      distanceToUser: tracking ? +(1 + Math.random() * 4).toFixed(1) : null,  // 1-5m, seulement en suivi actif
     })
 
     // La position n'est envoyée que si le chariot est en mouvement (suivi actif)
@@ -63,6 +64,10 @@ socket.on('cmd', (cmd) => {
       case 'move':
         // Le vrai chariot IoT actionnerait ses moteurs ici
         console.log(`→ Déplacement : ${command.args[0]}`) // log pour debug, mais avec le RPi : move(direction) actionnera les moteurs du chariot pour le faire avancer dans la direction spécifiée (ex: 'forward', 'backward', 'left', 'right')
+        break
+
+      case 'pairing_mode':
+        console.log('→ Mode appairage (attente bouton physique)')
         break
 
       case 'return_to_base':

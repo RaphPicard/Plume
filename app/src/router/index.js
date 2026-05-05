@@ -2,6 +2,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import ScanView     from '../views/ScanView.vue'
 import TrackingView from '../views/TrackingView.vue'
+import CartUnlockView  from '../views/CartUnlockView.vue'
+import UserSessionView from '../views/UserSessionView.vue'
 import AdminView    from '../views/AdminView.vue'
 import AdminLoginView from '../views/AdminLoginView.vue'
 import AdminCartSelectView from '../views/AdminCartSelectView.vue'
@@ -10,8 +12,10 @@ import { clearAdminSession, getAdminSession } from '../api/adminAuth'
 import { getAdminSelectedCart } from '../api/adminCartSelection'
 
 const routes = [
-  { path: '/',         component: ScanView },
-  { path: '/tracking', component: TrackingView },
+  { path: '/',              component: ScanView },
+  { path: '/tracking',      component: TrackingView },
+  { path: '/cart/:cartId',  component: CartUnlockView },
+  { path: '/session',       component: UserSessionView },
   { path: '/admin', component: AdminLoginView },
   { path: '/admin/login', redirect: '/admin' },
   { path: '/admin/select-cart', component: AdminCartSelectView, meta: { requiresAdmin: true } },

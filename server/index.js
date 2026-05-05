@@ -8,6 +8,7 @@ const bcrypt  = require('bcryptjs')        // pour vérifier le mot de passe has
 const cors    = require('cors')           // pour autoriser les requêtes cross-origin
 
 const { getUserByUsername, getCartState } = require('./db')  // accès PostgreSQL
+const { init: initUserEvents, confirmPairing } = require('./events/user')
 
 const app = express()
 app.use(cors({ origin: 'http://localhost:5173' }))
@@ -42,6 +43,17 @@ app.post('/login', async (req, res) => {
   res.json({ token, role: user.role })  // récupérer dans le fichier ScanView.vue du frontend pour stocker le token dans le localStorage et l'utiliser pour se connecter au WebSocket (api/socket.js) et pour afficher la bonne interface (ScanView ou AdminView)
 })
 
+
+// Simulation du bouton physique sur le robot (dev uniquement)
+app.post('/simulate/cart-confirm/:cartId', async (req, res) => {
+  try {
+    await confirmPairing(req.params.cartId)
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[simulate/cart-confirm]', err.message)
+    res.status(400).json({ ok: false, error: err.message })
+  }
+})
 
 // Session automatique pour la vue de scan : pas d'identifiants demandés, on crée un token utilisateur éphémère
 app.post('/session', (_req, res) => {
@@ -112,6 +124,7 @@ const io = new Server(httpServer, {
 });
 
 const rooms = new RoomManager(io);
+initUserEvents(io, rooms);
 
 
 
