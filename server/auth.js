@@ -17,7 +17,7 @@ function authMiddleware(socket, next) {
   try {
     const payload = jwt.verify(token, SECRET);
     // payload contient : { role: 'user'|'admin'|'cart', userId, cartId }
-    socket.data = payload; 
+    socket.data = payload;  // socket.data est ensuite accessible dans tous les handlers d'événements (ex: server/events/cart.js) pour vérifier les permissions et savoir quel utilisateur ou chariot est connecté
     next();
   } catch (err) {
     next(new Error('Invalid token'));

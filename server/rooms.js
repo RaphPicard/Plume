@@ -55,7 +55,7 @@ class RoomManager {
     this._alertQueues.set(cartId, [])
     if (!this._cartStatus.has(cartId)) this._cartStatus.set(cartId, 'available')
 
-    this.io.to(this.allAdminsRoom).emit('cart_online', { cartId, timestamp: Date.now() })
+    this.io.to(this.allAdminsRoom).emit('cart_online', { cartId, timestamp: Date.now() }) // cart_online est écouté dans le dashboard admin pour afficher les chariots connectés en temps réel
   }
 
   unregisterCart(cartId) {
@@ -64,7 +64,7 @@ class RoomManager {
 
     this._cmdQueues.delete(cartId)  // nettoyer la file de commandes et d'alertes pour ce chariot
     this._alertQueues.delete(cartId)
-    this.io.to(this.allAdminsRoom).emit('cart_offline', { cartId })
+    this.io.to(this.allAdminsRoom).emit('cart_offline', { cartId }) // cart_offline est écouté dans le dashboard admin pour afficher les chariots déconnectés en temps réel
   }
 
   isCartOnline(cartId) {
