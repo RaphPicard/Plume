@@ -16,7 +16,7 @@
 
       <section v-else>
         <h2>Scanner un chariot</h2> <!-- dépendance@zxing/browser pour lecture QR CODE-->
-        <div class="scanner-frame">
+        <div class="scanner-frame" :style="scannerFrameStyle">
           <video            
             ref="videoRef" 
             class="scanner-video"
@@ -46,8 +46,8 @@
           type="text"
           placeholder="Ex: C-042"
         />
-        <button @click="handleUnlock" :disabled="loading">
-          {{ loading ? 'Connexion au chariot...' : 'Déverrouiller' }}
+        <button @click="handleUnlock">
+          Déverrouiller
         </button>
         <p class="error" v-if="error">{{ error }}</p>
       </section>
@@ -60,7 +60,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCartStore } from '../store/cart'
-import { connectSocket, unlockCart, onCartStatus, onAlert } from '../api/socket'
+import { connectSocket } from '../api/socket'
 import { getScanSession, saveScanSession } from '../api/scanAuth'
 
 const router = useRouter()  //le routeur va permettre de naviguer vers la vue de suivi (TrackingView) après le déverrouillage du chariot
@@ -68,11 +68,14 @@ const store  = useCartStore() //appel cart.js pour partager les données du char
 
 const cartId   = ref('')
 const loadingSession = ref(true)
-const loading  = ref(false)
 const error    = ref('')
 const videoRef = ref(null)
 const cameraActive = ref(false)
 const cameraBusy = ref(false)
+const videoAspectRatio = ref(null)
+const scannerFrameStyle = computed(() =>
+  videoAspectRatio.value ? { aspectRatio: videoAspectRatio.value } : {}
+)
 const scannerHint = ref('Initialisation du lecteur QR...')
 const cameraStatusLabel = computed(() => {
   // Texte d'état affiché sous la caméra.
@@ -207,6 +210,11 @@ async function startCamera() {
     videoRef.value.srcObject = mediaStream
     await videoRef.value.play()
 
+    const { videoWidth, videoHeight } = videoRef.value
+    if (videoWidth && videoHeight) {
+      videoAspectRatio.value = `${videoWidth} / ${videoHeight}`
+    }
+
     scanStopped = false
     cameraActive.value = true
     scannerHint.value = 'Cadrez le QR code du chariot dans la zone de scan'
@@ -281,38 +289,14 @@ onBeforeUnmount(() => {
 })
 
 // --- Déverrouillage chariot ---
-async function handleUnlock() {
-  // Validation minimale avant d'envoyer la demande de déverrouillage au serveur.
-  if (!cartId.value.trim()) {
+function handleUnlock() {
+  const id = cartId.value.trim()
+  if (!id) {
     error.value = 'Entrez un identifiant de chariot'
     return
   }
-
-  loading.value = true
-  error.value   = ''
-
-  try {
-    await unlockCart(cartId.value.trim()) // api/socket.js : socket.emit('unlock_cart', { cartId }, callback)
-    // l'event 'unlock_cart' est dans events/user.js
-    // Déclenche l'action serveur qui lie l'utilisateur au chariot sélectionné.
-
-    // Enregistrer le chariot actif dans le store
-    store.setActiveCart(cartId.value.trim())  // activeCartId.value = cartId
-    // On mémorise le chariot actif dans le store partagé pour que la vue de suivi récupère le bon contexte.
-    // S'abonner aux données du chariot (Observers WebSocket) envoyé par le serveur et mettre à jour le store PINIA ==> MAJ AUTO de cartStatus et alert
-    onCartStatus((status) => store.updateStatus(status))    // onCartStatus() dans api/socket.js : socket.on('cart_status', callback) => MAJ du store : cartStatus.value = status
-    // Ensuite, on s'abonne aux événements temps réel du chariot.
-    // Ces listeners alimentent la vue de suivi en position, capteurs et alertes sans requête supplémentaire.
-
-    // Naviguer vers l'écran de suivi
-    router.push('/tracking')
-    // Enfin, on bascule vers l'écran de suivi une fois tout le contexte prêt.
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Impossible de déverrouiller le chariot'
-    error.value = message
-  } finally {
-    loading.value = false
-  }
+  stopCameraStream()
+  router.push(`/cart/${id}`)
 }
 </script>
 
@@ -389,7 +373,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .scanner-frame {
   position: relative;
-  height: 160px;
+  aspect-ratio: 4/3;
   overflow: hidden;
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 16px;

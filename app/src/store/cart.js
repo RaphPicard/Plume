@@ -6,12 +6,17 @@ import { ref, computed } from 'vue'
 
 export const useCartStore = defineStore('cart', () => {
 
+  const STORAGE_CART_ID  = 'session_cart_id'
+  const STORAGE_START_TS = 'session_start_time'
+
   // --- État ---
-  const activeCartId    = ref(null)     // null = pas de chariot actif
-  const isConnected     = ref(false)
-  const cartStatus      = ref(null)     // { weightKg, batteryPct, speedMs, distanceToUser }
+  const activeCartId = ref(localStorage.getItem(STORAGE_CART_ID) || null)
+  const isConnected  = ref(false)
+  const cartStatus   = ref(null)
   const alerts          = ref([])
-  const sessionStartTime = ref(null)   // timestamp ms — début de la session active
+  const sessionStartTime = ref(
+    localStorage.getItem(STORAGE_START_TS) ? Number(localStorage.getItem(STORAGE_START_TS)) : null
+  )
 
   // --- État admin ---
   const fleet          = ref([])       // [{ cartId, ownerId, status }] — liste complète des chariots
@@ -24,16 +29,20 @@ export const useCartStore = defineStore('cart', () => {
   // --- Actions ---
   function setActiveCart(cartId) {
     activeCartId.value = cartId
+    localStorage.setItem(STORAGE_CART_ID, cartId)
   }
 
   function clearActiveCart() {
     activeCartId.value     = null
     cartStatus.value       = null
     sessionStartTime.value = null
+    localStorage.removeItem(STORAGE_CART_ID)
+    localStorage.removeItem(STORAGE_START_TS)
   }
 
   function setSessionStartTime(timestamp) {
     sessionStartTime.value = timestamp
+    localStorage.setItem(STORAGE_START_TS, String(timestamp))
   }
 
   function updateStatus(status) {

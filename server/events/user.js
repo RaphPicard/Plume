@@ -14,8 +14,40 @@ function init(io, rooms) {
 // cartId → { userId, socketId, timer }
 const _pairingPending = new Map()
 
+// userId → { cartId, timer } — nettoyage différé pour absorber les refreshs
+const _abandonTimers = new Map()
+const SESSION_TTL_MS  = 30_000
+
+// userId → cartId — persiste l'association même avant que le disconnect de l'ancien socket soit traité
+const _userActiveCarts = new Map()
+
+// userId → socketId — permet d'ignorer le disconnect d'un ancien socket quand le nouveau a déjà repris
+const _activeSocketIds = new Map()
+
+
 function registerUserEvents(io, socket, rooms) {
   const { userId } = socket.data
+
+  // --- Restauration automatique de session après refresh ---
+  let restoredCartId = null
+
+  if (_abandonTimers.has(userId)) {
+    const { cartId, timer } = _abandonTimers.get(userId)
+    clearTimeout(timer)
+    _abandonTimers.delete(userId)
+    restoredCartId = cartId
+  } else if (_userActiveCarts.has(userId)) {
+    // Race condition : nouveau socket arrivé avant que le disconnect de l'ancien soit traité
+    restoredCartId = _userActiveCarts.get(userId)
+  }
+
+  if (restoredCartId && rooms.isCartOnline(restoredCartId)) {
+    rooms.assignUser(socket, restoredCartId, userId)
+    socket.data.activeCartId = restoredCartId
+    _activeSocketIds.set(userId, socket.id)
+    rooms.setCartStatus(restoredCartId, 'paired')
+    rooms.enqueueCmd(restoredCartId, 'start_tracking', [])
+  }
 
   // --- Watch cart (pré-session — CartUnlockView) ---
   socket.on('watch_cart', ({ cartId }) => {
@@ -85,6 +117,8 @@ function registerUserEvents(io, socket, rooms) {
 
       rooms.assignUser(socket, cartId, userId)
       socket.data.activeCartId = cartId
+      _userActiveCarts.set(userId, cartId)
+      _activeSocketIds.set(userId, socket.id)
 
       rooms.setCartStatus(cartId, 'paired')
       rooms.enqueueCmd(cartId, 'start_tracking', [])
@@ -104,6 +138,8 @@ function registerUserEvents(io, socket, rooms) {
     await clearCartOwner(cartId)
     rooms.releaseUser(socket, cartId)
     socket.data.activeCartId = null
+    _userActiveCarts.delete(userId)
+    _activeSocketIds.delete(userId)
 
     rooms.setCartStatus(cartId, 'available')
     rooms.enqueueCmd(cartId, 'stop_tracking', [])
@@ -115,10 +151,20 @@ function registerUserEvents(io, socket, rooms) {
   socket.on('disconnect', async () => {
     const cartId = socket.data.activeCartId
     if (cartId) {
-      await clearCartOwner(cartId)
-      rooms.releaseUser(socket, cartId)   // nettoie _cartUsers avant setCartStatus pour que cart_status_update soit émis avec ownerId: null
-      rooms.setCartStatus(cartId, 'available')
-      rooms.enqueueCmd(cartId, 'stop_tracking', [])
+      rooms.releaseUser(socket, cartId)
+
+      // Si un nouveau socket a déjà repris la session, on n'ouvre pas de timer d'abandon
+      if (_activeSocketIds.get(userId) !== socket.id) return
+
+      const timer = setTimeout(async () => {
+        _abandonTimers.delete(userId)
+        _userActiveCarts.delete(userId)
+        _activeSocketIds.delete(userId)
+        await clearCartOwner(cartId)
+        rooms.setCartStatus(cartId, 'available')
+        rooms.enqueueCmd(cartId, 'stop_tracking', [])
+      }, SESSION_TTL_MS)
+      _abandonTimers.set(userId, { cartId, timer })
     }
 
     if (socket.data.watchingCartId) {
@@ -157,6 +203,8 @@ async function confirmPairing(cartId) {
 
   _rooms.assignUser(userSocket, cartId, userId)
   userSocket.data.activeCartId = cartId
+  _userActiveCarts.set(userId, cartId)
+  _activeSocketIds.set(userId, userSocket.id)
 
   _rooms.setCartStatus(cartId, 'paired')
   _rooms.enqueueCmd(cartId, 'start_tracking', [])

@@ -19,24 +19,21 @@
     </div>
 
     <!-- Métriques temps réel -->
-    <div class="metrics" v-if="store.cartStatus">
+    <div class="metrics">
       <div class="metric">
-        <span class="val">{{ store.cartStatus.batteryPct ?? '—' }}%</span>
+        <span class="val">{{ store.cartStatus?.batteryPct ?? '—' }}%</span>
         <span class="lbl">Batterie</span>
       </div>
       <div class="metric">
         <span class="val">
-          {{ store.cartStatus.distanceToUser != null ? store.cartStatus.distanceToUser + ' m' : '—' }}
+          {{ store.cartStatus?.distanceToUser != null ? store.cartStatus.distanceToUser + ' m' : '—' }}
         </span>
         <span class="lbl">Distance</span>
       </div>
       <div class="metric">
-        <span class="val">{{ store.cartStatus.weightKg ?? '—' }} kg</span>
+        <span class="val">{{ store.cartStatus?.weightKg ?? '—' }} kg</span>
         <span class="lbl">Charge</span>
       </div>
-    </div>
-    <div class="metrics-placeholder" v-else>
-      En attente des données capteurs...
     </div>
 
     <!-- Alertes -->
@@ -61,13 +58,23 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCartStore } from '../store/cart'
-import { stopCart, onCartStatus, onAlert, onKicked } from '../api/socket'
+import { connectSocket, stopCart, onCartStatus, onAlert, onKicked } from '../api/socket'
+import { getScanSession, saveScanSession } from '../api/scanAuth'
 
 const router = useRouter()
 const store  = useCartStore()
 
-if (!store.hasActiveCart) {
-  router.replace('/')
+async function ensureSession() {
+  const existing = getScanSession()
+  if (existing) {
+    await connectSocket(existing.token)
+    return
+  }
+  const res = await fetch('http://localhost:3000/session', { method: 'POST' })
+  if (!res.ok) throw new Error('Impossible de créer la session')
+  const { token } = await res.json()
+  saveScanSession(token)
+  await connectSocket(token)
 }
 
 const elapsed = ref(0)
@@ -88,19 +95,32 @@ async function handleTerminer() {
   router.push('/')
 }
 
-onMounted(() => {
-  // Reprendre depuis sessionStartTime si disponible, sinon commencer à 0
-  if (store.sessionStartTime) {
-    elapsed.value = Math.floor((Date.now() - store.sessionStartTime) / 1000)
+onMounted(async () => {
+  if (!store.hasActiveCart) {
+    router.replace('/')
+    return
   }
 
-  elapsedTimer    = setInterval(() => elapsed.value++, 1000)
   unsubCartStatus = onCartStatus(status => store.updateStatus(status))
   unsubAlert      = onAlert(alert => store.addAlert(alert))
   unsubKicked     = onKicked(() => {
     store.clearActiveCart()
     router.replace('/')
   })
+
+  try {
+    await ensureSession()
+  } catch {
+    store.clearActiveCart()
+    router.replace('/')
+    return
+  }
+
+  if (store.sessionStartTime) {
+    elapsed.value = Math.floor((Date.now() - store.sessionStartTime) / 1000)
+  }
+
+  elapsedTimer = setInterval(() => elapsed.value++, 1000)
 })
 
 onUnmounted(() => {

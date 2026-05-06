@@ -59,6 +59,7 @@ export function disconnectSocket() {
   socket.disconnect()
 }
 
+
 // --- Actions utilisateur ---
 
 export function unlockCart(cartId) {    // appelé dans ScanView.vue par handleUnlockCart, après le scan du QR code du chariot. Le serveur va vérifier que ce cartId est bien associé à l'utilisateur (via le token JWT) et va répondre si le déverrouillage est autorisé ou pas.
@@ -75,6 +76,7 @@ export function stopCart() {  //appelé dans TrackingView.vue par handleStopCart
     socket.emit('stop_cart', {}, resolve)
   })
 }
+
 
 // --- Watch cart (pré-session) ---
 
