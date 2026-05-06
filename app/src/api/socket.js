@@ -169,12 +169,28 @@ export function onCartPosition(callback) {
   return () => socket.off('cart_position', callback)
 }
 
+// --- Listeners admin (suite) ---
+
+export function onCartStatusUpdate(callback) {
+  socket.on('cart_status_update', callback)
+  return () => socket.off('cart_status_update', callback)
+}
+
+export function onKicked(callback) {
+  socket.on('kicked', callback)
+  return () => socket.off('kicked', callback)
+}
+
 // --- Actions admin ---
 
 export function getFleet() {
   return new Promise((resolve) => {
     socket.emit('admin:get_fleet', {}, (response) => resolve(response.carts))
   })
+}
+
+export function adminKickCart(cartId) {
+  socket.emit('admin:kick_cart', { cartId })
 }
 
 export function adminForceStop(cartId) {

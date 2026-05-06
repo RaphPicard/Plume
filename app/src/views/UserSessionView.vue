@@ -61,7 +61,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCartStore } from '../store/cart'
-import { stopCart, onCartStatus, onAlert } from '../api/socket'
+import { stopCart, onCartStatus, onAlert, onKicked } from '../api/socket'
 
 const router = useRouter()
 const store  = useCartStore()
@@ -71,9 +71,10 @@ if (!store.hasActiveCart) {
 }
 
 const elapsed = ref(0)
-let elapsedTimer   = null
+let elapsedTimer    = null
 let unsubCartStatus = null
 let unsubAlert      = null
+let unsubKicked     = null
 
 const elapsedFormatted = computed(() => {
   const m    = Math.floor(elapsed.value / 60)
@@ -96,12 +97,17 @@ onMounted(() => {
   elapsedTimer    = setInterval(() => elapsed.value++, 1000)
   unsubCartStatus = onCartStatus(status => store.updateStatus(status))
   unsubAlert      = onAlert(alert => store.addAlert(alert))
+  unsubKicked     = onKicked(() => {
+    store.clearActiveCart()
+    router.replace('/')
+  })
 })
 
 onUnmounted(() => {
   clearInterval(elapsedTimer)
   unsubCartStatus?.()
   unsubAlert?.()
+  unsubKicked?.()
 })
 </script>
 

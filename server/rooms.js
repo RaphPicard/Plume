@@ -158,6 +158,11 @@ class RoomManager {
   // Met à jour le statut en mémoire (appelé par les events user)
   setCartStatus(cartId, status) {
     this._cartStatus.set(cartId, status)
+    this.toAdmins('cart_status_update', {
+      cartId,
+      status,
+      ownerId: this._cartUsers.get(cartId) ?? null,
+    })
   }
 
   // ── Flush ───────────────────────────────────────────────────────────────────

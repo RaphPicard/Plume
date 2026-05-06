@@ -1,7 +1,7 @@
 // Events côté dashboard admin
 // server/events/admin.js
 
-const { getAllCarts } = require('../db');
+const { getAllCarts, clearCartOwner } = require('../db');
 
 function registerAdminEvents(io, socket, rooms) {
   rooms.registerAdmin(socket);
@@ -27,6 +27,22 @@ function registerAdminEvents(io, socket, rooms) {
   socket.on('admin:get_fleet', async (_, callback) => {
     const carts = await getAllCarts();
     callback({ carts: carts.map(c => ({ ...c, online: rooms._cartSockets.has(c.cartId) })) });
+  });
+
+  // --- Kick utilisateur ---
+  socket.on('admin:kick_cart', async ({ cartId }) => {
+    const userSocket = [...io.sockets.sockets.values()].find(s => s.data.activeCartId === cartId);
+
+    await clearCartOwner(cartId);
+
+    if (userSocket) {
+      rooms.releaseUser(userSocket, cartId);
+      userSocket.data.activeCartId = null;
+      userSocket.emit('kicked', { cartId });
+    }
+
+    rooms.setCartStatus(cartId, 'available');
+    rooms.enqueueCmd(cartId, 'stop_tracking', []);
   });
 }
 

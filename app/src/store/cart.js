@@ -66,6 +66,14 @@ export const useCartStore = defineStore('cart', () => {
     delete positions.value[cartId]
   }
 
+  function updateCartFleetStatus({ cartId, status, ownerId }) {
+    const existing = fleet.value.find(c => c.cartId === cartId)
+    if (existing) {
+      existing.status  = status
+      existing.ownerId = ownerId
+    }
+  }
+
   function updateSensorData(data) {
     // data = { cartId, accelX, accelY, accelZ, gyroX, gyroY, gyroZ, weightKg, speedMs, batteryPct }
     sensorData.value[data.cartId] = data
@@ -85,6 +93,6 @@ export const useCartStore = defineStore('cart', () => {
     // actions utilisateur
     setActiveCart, clearActiveCart, updateStatus, addAlert, setConnected, setSessionStartTime,
     // actions admin
-    setFleet, setCartOnline, setCartOffline, updateSensorData, updatePosition,
+    setFleet, setCartOnline, setCartOffline, updateCartFleetStatus, updateSensorData, updatePosition,
   }
 })

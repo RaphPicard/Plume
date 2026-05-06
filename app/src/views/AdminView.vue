@@ -54,7 +54,10 @@
 
             <div class="cart-status-line">
               <span class="status-text">{{ statusLabel(selectedCart) }}</span>
-              <span class="owner" v-if="selectedCart.ownerId">👤 {{ selectedCart.ownerId }}</span>
+              <span class="owner-group" v-if="selectedCart.ownerId">
+                <span class="owner">👤 {{ selectedCart.ownerId }}</span>
+                <button class="kick-inline-btn" @click="kick(selectedCart.cartId)">✕ Expulser</button>
+              </span>
             </div>
 
             <div class="metrics" v-if="selectedSensorData">
@@ -118,10 +121,12 @@ import {
   adminForceStop,
   adminMove,
   adminRecall,
+  adminKickCart,
   onCartOnline,
   onCartOffline,
   onSensorUpdate,
   onCartPosition,
+  onCartStatusUpdate,
   disconnectSocket,
 } from '../api/socket'
 import { clearAdminSelectedCart } from '../api/adminCartSelection'
@@ -145,17 +150,18 @@ const STREAM_URLS = {
 
 const currentStreamUrl = computed(() => STREAM_URLS[selectedStream.value])
 
-let unsubOnline, unsubOffline, unsubSensor, unsubPosition
+let unsubOnline, unsubOffline, unsubSensor, unsubPosition, unsubStatusUpdate
 
 onMounted(async () => {
   const carts = await getFleet()
   store.setFleet(carts)
   loading.value = false
 
-  unsubOnline = onCartOnline((data) => store.setCartOnline(data.cartId))
-  unsubOffline = onCartOffline((data) => store.setCartOffline(data.cartId))
-  unsubSensor = onSensorUpdate((data) => store.updateSensorData(data))
-  unsubPosition = onCartPosition((data) => store.updatePosition(data))
+  unsubOnline       = onCartOnline((data)       => store.setCartOnline(data.cartId))
+  unsubOffline      = onCartOffline((data)      => store.setCartOffline(data.cartId))
+  unsubSensor       = onSensorUpdate((data)     => store.updateSensorData(data))
+  unsubPosition     = onCartPosition((data)     => store.updatePosition(data))
+  unsubStatusUpdate = onCartStatusUpdate((data) => store.updateCartFleetStatus(data))
 })
 
 onUnmounted(() => {
@@ -163,6 +169,7 @@ onUnmounted(() => {
   unsubOffline?.()
   unsubSensor?.()
   unsubPosition?.()
+  unsubStatusUpdate?.()
 })
 
 function forceStop(cartId) {
@@ -188,9 +195,14 @@ function logoutAdmin() {
   router.replace('/admin')
 }
 
+function kick(cartId) {
+  adminKickCart(cartId)
+}
+
 function statusLabel(cart) {
   if (!cart.online) return 'Hors ligne'
-  if (cart.status === 'in_use') return 'En cours d\'utilisation'
+  if (cart.status === 'paired') return 'En cours d\'utilisation'
+  if (cart.status === 'pairing_pending') return 'Appairage en cours...'
   return 'Disponible'
 }
 </script>
@@ -374,7 +386,24 @@ h1 { font-size: 22px; margin: 0; flex: 1; }
   margin-bottom: 14px;
 }
 
+.owner-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .owner { color: #fbbf24; }
+
+.kick-inline-btn {
+  padding: 2px 8px;
+  background: rgba(251,191,36,0.12);
+  border: 1px solid rgba(251,191,36,0.3);
+  color: #fbbf24;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
 
 .metrics {
   display: grid;

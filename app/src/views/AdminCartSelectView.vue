@@ -44,7 +44,7 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCartStore } from '../store/cart'
-import { getFleet, disconnectSocket, onCartOnline, onCartOffline } from '../api/socket'
+import { getFleet, disconnectSocket, onCartOnline, onCartOffline, onCartStatusUpdate } from '../api/socket'
 import { clearAdminSession } from '../api/adminAuth'
 import { clearAdminSelectedCart, saveAdminSelectedCart } from '../api/adminCartSelection'
 
@@ -52,20 +52,22 @@ const router = useRouter()
 const store = useCartStore()
 const loading = ref(true)
 
-let unsubOnline, unsubOffline
+let unsubOnline, unsubOffline, unsubStatusUpdate
 
 onMounted(async () => {
   const carts = await getFleet()
   store.setFleet(carts)
   loading.value = false
 
-  unsubOnline  = onCartOnline((data)  => store.setCartOnline(data.cartId))
-  unsubOffline = onCartOffline((data) => store.setCartOffline(data.cartId))
+  unsubOnline        = onCartOnline((data)        => store.setCartOnline(data.cartId))
+  unsubOffline       = onCartOffline((data)       => store.setCartOffline(data.cartId))
+  unsubStatusUpdate  = onCartStatusUpdate((data)  => store.updateCartFleetStatus(data))
 })
 
 onUnmounted(() => {
   unsubOnline?.()
   unsubOffline?.()
+  unsubStatusUpdate?.()
 })
 
 function openCart(cartId) {
@@ -82,7 +84,8 @@ function logoutAdmin() {
 
 function statusLabel(cart) {
   if (!cart.online) return 'Hors ligne'
-  if (cart.status === 'in_use') return 'En cours d\'utilisation'
+  if (cart.status === 'paired') return 'En cours d\'utilisation'
+  if (cart.status === 'pairing_pending') return 'Appairage en cours...'
   return 'Disponible'
 }
 </script>

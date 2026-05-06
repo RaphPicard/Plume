@@ -116,6 +116,7 @@ function registerUserEvents(io, socket, rooms) {
     const cartId = socket.data.activeCartId
     if (cartId) {
       await clearCartOwner(cartId)
+      rooms.releaseUser(socket, cartId)   // nettoie _cartUsers avant setCartStatus pour que cart_status_update soit émis avec ownerId: null
       rooms.setCartStatus(cartId, 'available')
       rooms.enqueueCmd(cartId, 'stop_tracking', [])
     }
