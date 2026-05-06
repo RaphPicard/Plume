@@ -284,3 +284,5 @@ Format envoyé au Raspberry :
 ```
 
 Fichiers modifiés : `server/rooms.js`, `server/events/admin.js`, `server/events/user.js`, `server/events/cart.js`
+
+
