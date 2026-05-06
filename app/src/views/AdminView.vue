@@ -139,8 +139,8 @@ const selectedSensorData = computed(() => store.sensorData[cartId.value])
 const selectedPosition = computed(() => store.positions[cartId.value])
 
 const STREAM_URLS = {
-  raw: 'http://192.168.1.10:5500/stream/raw',
-  annotated: 'http://192.168.1.10:5500/stream/annotated',
+  raw: 'http://100.81.175.3:5500/stream/raw',
+  annotated: 'http://100.81.175.3:5500/stream/annotated',
 }
 
 const currentStreamUrl = computed(() => STREAM_URLS[selectedStream.value])

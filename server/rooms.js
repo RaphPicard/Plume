@@ -33,6 +33,9 @@ class RoomManager {
     // cartId → [string]  alertes en attente d'envoi
     this._alertQueues = new Map()
 
+    // cartId → number  dernier pourcentage de batterie connu (pour snapshot avant session)
+    this._cartBattery = new Map()
+
     this._flushTimer = setInterval(() => this._flushAll(), FLUSH_INTERVAL_MS)
   }
 
@@ -40,6 +43,7 @@ class RoomManager {
 
   cartRoom(cartId)     { return `cart:${cartId}` }
   userRoom(cartId)     { return `user_of:${cartId}` }
+  watcherRoom(cartId)  { return `watchers:${cartId}` }
   get allCartsRoom()   { return 'carts' }
   get allAdminsRoom()  { return 'admins' }
 
@@ -56,6 +60,11 @@ class RoomManager {
     if (!this._cartStatus.has(cartId)) this._cartStatus.set(cartId, 'available')
 
     this.io.to(this.allAdminsRoom).emit('cart_online', { cartId, timestamp: Date.now() }) // cart_online est écouté dans le dashboard admin pour afficher les chariots connectés en temps réel
+    this.io.to(this.watcherRoom(cartId)).emit('cart_availability', {
+      cartId, online: true,
+      batteryPct: this.getCachedBattery(cartId),
+      status: this._cartStatus.get(cartId) ?? 'available',
+    })
   }
 
   unregisterCart(cartId) {
@@ -65,6 +74,10 @@ class RoomManager {
     this._cmdQueues.delete(cartId)  // nettoyer la file de commandes et d'alertes pour ce chariot
     this._alertQueues.delete(cartId)
     this.io.to(this.allAdminsRoom).emit('cart_offline', { cartId }) // cart_offline est écouté dans le dashboard admin pour afficher les chariots déconnectés en temps réel
+    this.io.to(this.watcherRoom(cartId)).emit('cart_availability', {
+      cartId, online: false, batteryPct: null, status: 'offline',
+    })
+    this._cartBattery.delete(cartId)
   }
 
   isCartOnline(cartId) {
@@ -85,6 +98,32 @@ class RoomManager {
 
   getCartUser(cartId) {
     return this._cartUsers.get(cartId) ?? null
+  }
+
+  // ── Watchers (avant session — pour CartUnlockView) ───────────────────────────
+
+  watchCart(socket, cartId) {
+    socket.join(this.watcherRoom(cartId))
+    socket.emit('cart_availability', {
+      cartId,
+      online:     this.isCartOnline(cartId),
+      batteryPct: this.getCachedBattery(cartId),
+      status:     this._cartStatus.get(cartId) ?? 'available',
+    })
+  }
+
+  unwatchCart(socket, cartId) {
+    socket.leave(this.watcherRoom(cartId))
+  }
+
+  // ── Batterie en cache ────────────────────────────────────────────────────────
+
+  setCachedBattery(cartId, pct) {
+    this._cartBattery.set(cartId, pct)
+  }
+
+  getCachedBattery(cartId) {
+    return this._cartBattery.get(cartId) ?? null
   }
 
   // ── Admins ──────────────────────────────────────────────────────────────────

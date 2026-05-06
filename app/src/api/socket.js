@@ -76,6 +76,46 @@ export function stopCart() {  //appelé dans TrackingView.vue par handleStopCart
   })
 }
 
+// --- Watch cart (pré-session) ---
+
+export function watchCart(cartId) {
+  socket.emit('watch_cart', { cartId })
+}
+
+export function unwatchCart(cartId) {
+  socket.emit('unwatch_cart', { cartId })
+}
+
+export function onCartAvailability(callback) {
+  socket.on('cart_availability', callback)
+  return () => socket.off('cart_availability', callback)
+}
+
+// --- Pairing ---
+
+export function requestPairing(cartId) {
+  return new Promise((resolve, reject) => {
+    socket.emit('request_pairing', { cartId }, (response) => {
+      if (response.ok) resolve(response)
+      else reject(new Error(response.error))
+    })
+  })
+}
+
+export function cancelPairing(cartId) {
+  socket.emit('cancel_pairing', { cartId })
+}
+
+export function onPairingConfirmed(callback) {
+  socket.once('pairing_confirmed', callback)
+  return () => socket.off('pairing_confirmed', callback)
+}
+
+export function onPairingTimeout(callback) {
+  socket.once('pairing_timeout', callback)
+  return () => socket.off('pairing_timeout', callback)
+}
+
 // --- Écouter les events (retourne une fonction pour se désabonner) ---
 
 export function onCartStatus(callback) {  //appelé dans ScanView.vue 

@@ -20,12 +20,19 @@ function registerCartEvents(io, socket, rooms) {    // appelé dans server.js lo
 
   // --- Données capteurs ---
   socket.on('sensor_data', (data) => { // on les recoit du raspberry Pi (cart_client.js) et on les relaie aux admins et à l'utilisateur concerné (si connecté) ; le chariot doit éouter l'event 'cmd' pour recevoir les commandes et alertes qui lui sont destinées
+    rooms.setCachedBattery(cartId, data.batteryPct);
     rooms.toAdmins('sensor_update', { cartId, ...data }); //notif admins des données COMPLETES capteurs
     rooms.toUser(cartId, 'cart_status', {
       cartId,
-      weightKg:   data.weightKg,
-      batteryPct: data.batteryPct,
-      speedMs:    data.speedMs,
+      weightKg:       data.weightKg,
+      batteryPct:     data.batteryPct,
+      speedMs:        data.speedMs,
+      distanceToUser: data.distanceToUser ?? null,
+    });
+    // Mise à jour batterie live pour les watchers (avant session)
+    rooms.io.to(rooms.watcherRoom(cartId)).emit('cart_availability', {
+      cartId, online: true, batteryPct: data.batteryPct,
+      status: rooms._cartStatus.get(cartId) ?? 'available',
     });
   });
 
