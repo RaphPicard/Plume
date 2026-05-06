@@ -11,7 +11,14 @@ const { getUserByUsername, getCartState } = require('./db')  // accès PostgreSQ
 const { init: initUserEvents, confirmPairing } = require('./events/user')
 
 const app = express()
-app.use(cors({ origin: 'http://localhost:5173' }))
+// En dev, Vite peut démarrer sur un port différent de 5173 si le port est déjà pris
+// (5174, 5175...) — on accepte n'importe quel localhost pour éviter les erreurs CORS.
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin || /^http:\/\/localhost(:\d+)?$/.test(origin)) cb(null, true)
+    else cb(new Error('CORS: origine non autorisée'))
+  }
+}))
 app.use(express.json())
 
 const SECRET      = process.env.JWT_SECRET
