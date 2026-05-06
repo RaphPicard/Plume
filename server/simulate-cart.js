@@ -23,7 +23,7 @@ socket.on('connect', () => {
     //   → cart_status à l'utilisateur seulement si un chariot lui est assigné)
     socket.emit('sensor_data', {    //sensor_data récupérable dans cart.js pour être envoyé aux admins et à l'utilisateur assigné
       weightKg:       (Math.random() * 10).toFixed(1),
-      batteryPct:     Math.floor(Math.random() * 100),
+      batteryPct:     67,  // valeur fixe pour le test, mais avec le RPi : batteryPct serait mesuré par un capteur de batterie
       speedMs:        tracking ? (Math.random() * 2).toFixed(2) : '0.00',  // vitesse nulle si pas de suivi actif
       accelX:         (Math.random() - 0.5).toFixed(3),
       accelY:         (Math.random() - 0.5).toFixed(3),
