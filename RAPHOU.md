@@ -8,25 +8,11 @@
 
 > "Le projet s'appelle PLUME. C'est un système de gestion de flotte de chariots à bagages connectés pour aéroport. Il y a trois acteurs : l'utilisateur (agent au sol), l'administrateur (superviseur), et le chariot lui-même (Raspberry Pi)."
 
-**Lancer dans cet ordre (dans 4 terminaux) :**
-
-```bash
-# 1. Infrastructure (Postgres + Redis)
-docker compose up -d
-
-# 2. Serveur backend
-node server/index.js        # → écoute sur :3000
-
-# 3. Simulateur de chariot (remplace le Raspberry Pi)
-node server/simulate-cart.js
-
-# 4. Frontend
-cd app && npm run dev       # → http://localhost:5173
-```
+**Lancer le projet** → voir la section [Lancement courant dans le README](README.md#lancement-courant).
 
 **Montrer les deux interfaces :**
-- Ouvrir **http://localhost:5173** → vue utilisateur (écran de login)
-- Ouvrir un second onglet sur **http://localhost:5173/admin** (ou se connecter en tant qu'admin) → dashboard flotte
+- Fenêtre Electron qui s'ouvre → vue utilisateur (scan QR + login)
+- Taper `/admin` dans l'URL de la fenêtre ou ouvrir `http://localhost:5173/admin` → dashboard admin
 
 ---
 
@@ -34,27 +20,27 @@ cd app && npm run dev       # → http://localhost:5173
 
 #### 1.1 Vue Router — comment on navigue
 
-> "Tout commence dans `app/src/router/index.js`. Il n'y a que 3 routes :`
+> "La navigation est entièrement gérée par Vue Router. Il y a 5 routes principales."
 
 ```
-/           → ScanView.vue      (login + déverrouillage chariot)
-/tracking   → TrackingView.vue  (données capteurs temps réel)
-/admin      → AdminView.vue     (dashboard flotte complète)
+/cart/:cartId        → CartUnlockView.vue    (scan QR ou saisie manuelle, pairing)
+/session             → UserSessionView.vue   (données capteurs temps réel, utilisateur)
+/admin               → AdminLoginView.vue    (login admin, accessible uniquement par URL)
+/admin/select-cart   → AdminCartSelectView.vue (choix du chariot à surveiller)
+/admin/dashboard/:cartId → AdminView.vue    (dashboard flotte complet)
 ```
 
-La navigation est **programmée** depuis le code Vue (pas de liens cliquables) : après login, `router.push('/admin')` ou `router.push('/tracking')`. (dans `ScanView.vue`)
+La navigation est **programmée** depuis le code Vue : après pairing confirmé, `router.push('/session')` ; après login admin, `router.push('/admin/select-cart')`.
 
 ---
 
-#### 1.2 ScanView — login, puis déverrouillage chariot
+#### 1.2 CartUnlockView — scan QR et pairing physique
 
-> "C'est la porte d'entrée de l'application. Elle gère deux étapes successives, contrôlées par `v-if` sur `store.isConnected`."
+> "L'utilisateur scanne le QR code collé sur le chariot. Le pairing se fait en deux temps : le serveur attend la confirmation physique du chariot."
 
-**Fichier :** `plume/app/src/views/ScanView.vue`
+**Fichier :** `app/src/views/CartUnlockView.vue`
 
-**Étape 1 — Login (`handleLogin`)**
-
-L'utilisateur entre son login/password. Le frontend fait un appel HTTP classique :
+**Étape 1 — Login HTTP**
 
 ```
 POST http://localhost:3000/login
@@ -62,48 +48,39 @@ Body: { username, password }
 → Réponse: { token, role }
 ```
 
-Avec ce token, le frontend ouvre la connexion WebSocket au serveur :
-```js
-connectSocket(token)   // → socket.auth = { token }, socket.connect() dans api/socket.js
-```
-Le serveur valide le JWT dans `auth.js` (middleware `io.use(authMiddleware)`), puis appelle le bon handler selon le rôle.
+Le token JWT est stocké et réutilisé pour la connexion WebSocket.
 
-> Si le rôle est `admin` → `router.push('/admin')` directement.
+**Étape 2 — Pairing (`request_pairing`)**
 
-**Étape 2 — Déverrouillage (`handleUnlock`)**
-
-L'utilisateur saisit l'ID du chariot (ex. `C-001`). Le frontend émet un event WebSocket :
+L'utilisateur scanne le QR code (ou saisit l'ID). Le frontend émet :
 
 ```js
-socket.emit('unlock_cart', { cartId }, callback)
+socket.emit('request_pairing', { cartId }, callback)
 ```
 
-Le serveur (dans `events/user.js`) :
-1. Vérifie que le chariot existe et est libre (Redis)
-2. Associe l'utilisateur au chariot en Redis (`setCartOwner`)
-3. Fait rejoindre à l'utilisateur la room `user_of:C-001`
-4. Envoie `cmd: start_tracking` au chariot
+Le serveur :
+1. Vérifie que le chariot existe et est disponible (mémoire `rooms._cartStatus`)
+2. Stocke la demande en attente dans `_pairingPending` (timeout 60 s)
+3. Attend la confirmation physique du chariot (bouton sur le robot)
+4. Émet `pairing_confirmed` + `start_tracking` au chariot
 
-→ Si OK : `router.push('/tracking')`
+→ Si confirmé : `router.push('/session')`
 
 ---
 
-#### 1.3 TrackingView — données temps réel utilisateur
+#### 1.3 UserSessionView — données temps réel utilisateur
 
-> "Une fois connecté à un chariot, l'utilisateur voit en temps réel le poids, la batterie, la vitesse, et les alertes obstacles."
+> "Une fois pairé, l'utilisateur voit en temps réel le poids, la batterie, la vitesse, et les alertes obstacles."
 
-**Ce qui se passe côté serveur (`events/cart.js`) :**
+**Fichier :** `app/src/views/UserSessionView.vue`
 
-Quand le simulateur/Raspberry envoie `sensor_data`, le serveur :
+**Côté serveur (`events/cart.js`) :**
+
+Quand le Raspberry envoie `sensor_data`, le serveur :
 - Diffuse les données complètes aux admins : `io.to('admins').emit('sensor_update', ...)`
-- Diffuse les données réduites à l'utilisateur du chariot : `io.to('user_of:C-001').emit('cart_status', { weightKg, batteryPct, speedMs })`
+- Diffuse les données réduites à l'utilisateur : `io.to('user_of:C-001').emit('cart_status', { weightKg, batteryPct, speedMs })`
 
-Le frontend écoute `cart_status` via `socket.js` :
-```js
-socket.on('cart_status', callback)  // → store.updateStatus(status)
-```
-
-Le store Pinia (`store/cart.js`) centralise les données et les expose aux deux vues `ScanView` et `TrackingView` sans re-connexion.
+Le store Pinia (`store/cart.js`) centralise les données et les expose à la vue sans re-connexion.
 
 ---
 
@@ -111,7 +88,9 @@ Le store Pinia (`store/cart.js`) centralise les données et les expose aux deux 
 
 > "L'admin voit tous les chariots en temps réel et peut les piloter à distance."
 
-**À la connexion,** l'admin reçoit l'état complet de la flotte via un event WebSocket :
+**Fichier :** `app/src/views/AdminView.vue` (accessible via `/admin/dashboard/:cartId`)
+
+**À la connexion,** l'admin reçoit l'état complet de la flotte :
 ```js
 socket.emit('admin:get_fleet', {}, callback)
 → callback reçoit { carts: [...] }
@@ -120,11 +99,9 @@ socket.emit('admin:get_fleet', {}, callback)
 **En temps réel,** le serveur pousse les updates à la room `admins` :
 - `sensor_update` : nouvelles données capteurs
 - `cart_online` / `cart_offline` : présence du chariot
-- `cart_position` : coordonnées x/y
+- `cart_status_update` : changement d'état (paired, available…)
 
 **Commandes admin (sens inverse) :**
-L'admin appuie sur un bouton → le frontend émet un event → le serveur le transmet au chariot :
-
 ```
 AdminView.vue
   → socket.emit('admin:move', { cartId, direction })
@@ -132,7 +109,7 @@ AdminView.vue
   → Raspberry Pi : exécute le mouvement
 ```
 
-Pareil pour `admin:force_stop` et `admin:recall`.
+Pareil pour `admin:force_stop`, `admin:recall`, kick utilisateur.
 
 ---
 
@@ -146,13 +123,13 @@ Pareil pour `admin:force_stop` et `admin:recall`.
 ```
 1. POST /login  →  serveur vérifie bcrypt(password, hash_en_base)
 2. Serveur génère : jwt.sign({ role, userId }, SECRET, { expiresIn: '24h' })
-3. Frontend stocke le token en mémoire et l'envoie à chaque connexion WS :
+3. Frontend stocke le token et l'envoie à chaque connexion WS :
    socket.auth = { token }
 4. Middleware auth.js (io.use) : jwt.verify(token) → injecte dans socket.data
 5. index.js lit socket.data.role → appelle le bon registerXxxEvents()
 ```
 
-Trois rôles possibles dans le token : `user`, `admin`, `cart`.
+Trois rôles : `user`, `admin`, `cart`. Les chariots ont leur propre route `/cart-token` (JWT 30 jours via secret partagé).
 
 ---
 
@@ -162,12 +139,12 @@ Trois rôles possibles dans le token : `user`, `admin`, `cart`.
 
 | Room | Membres | Messages reçus |
 |---|---|---|
-| `cart:C-001` | Le chariot C-001 | Commandes `cmd` |
-| `user_of:C-001` | L'utilisateur du C-001 | `cart_status`, `alert` |
+| `cart:C-001` | Le Raspberry C-001 | Commandes `cmd` (batch JSON) |
+| `user_of:C-001` | L'utilisateur pairé au C-001 | `cart_status`, `alert` |
 | `admins` | Tous les admins connectés | `sensor_update`, `cart_online/offline`, `cart_position` |
-| `carts` | Tous les chariots | (usage futur, broadcast) |
+| `carts` | Tous les Raspberry | Broadcast global (non utilisé actuellement) |
 
-Un utilisateur rejoint `user_of:C-001` au moment du `unlock_cart`. Il en sort au `stop_cart` ou à la déconnexion.
+Un utilisateur rejoint `user_of:C-001` au moment du `pairing_confirmed`. Il en sort à la libération du chariot ou à la déconnexion.
 
 ---
 
@@ -178,28 +155,22 @@ Un utilisateur rejoint `user_of:C-001` au moment du `unlock_cart`. Il en sort au
 - **PostgreSQL** (persistant) : stocke les utilisateurs (`id, username, password_hash, role`) et le registre des chariots (`cart_id`). Données stables.
 - **Redis** (temporaire) : stocke l'état **temps réel** de chaque chariot — `{ ownerId, status }`. Très rapide, en mémoire, remis à zéro au redémarrage.
 
-Quand un utilisateur déverrouille `C-001` :
 ```
-Redis : SET cart:C-001 → { ownerId: "evan", status: "in_use" }
-```
-Quand il libère le chariot :
-```
-Redis : SET cart:C-001 → { ownerId: null, status: "available" }
+Pairing C-001 :  Redis : SET cart:C-001 → { ownerId: "evan", status: "in_use" }
+Libération :     Redis : SET cart:C-001 → { ownerId: null,   status: "available" }
 ```
 
 ---
 
 #### 2.4 Simulateur de chariot (`simulate-cart.js`)
 
-> "Comme on n'a pas encore le Raspberry Pi intégré, un simulateur Node.js joue le rôle du chariot physique."
+> "Un simulateur Node.js joue le rôle du chariot physique pendant les démos."
 
-Le simulateur se connecte au serveur avec un JWT de rôle `cart`, puis :
-- Envoie `sensor_data` toutes les secondes à events/cart.js avec des valeurs aléatoires (poids, batterie, vitesse, accéléromètre) 
-- Récupérable avec cart_status pour les utilisateurs et sensor_update pour les admins
-- Envoie des `position_update` avec des coordonnées qui bougent
+Le simulateur se connecte au serveur avec un JWT `cart`, puis :
+- Envoie `sensor_data` toutes les secondes (poids, batterie, vitesse, accéléromètre)
+- Envoie des `position_update` avec des coordonnées aléatoires
 - Répond aux commandes `cmd` reçues (affichage console)
-
-C'est exactement le comportement qu'aura le vrai Raspberry Pi, avec les vraies valeurs capteurs à la place des valeurs simulées.
+- Peut confirmer un pairing via `GET /simulate/cart-confirm/:cartId`
 
 ---
 
@@ -207,36 +178,36 @@ C'est exactement le comportement qu'aura le vrai Raspberry Pi, avec les vraies v
 
 > "Côté frontend, tout le WebSocket est centralisé dans un seul fichier singleton."
 
-`socket.js` crée **une seule instance** Socket.IO (`autoConnect: false`) et expose des fonctions claires utilisées par les vues :
+`socket.js` crée **une seule instance** Socket.IO (`autoConnect: false`) :
 
 - `connectSocket(token)` — se connecte après le login
-- `unlockCart(cartId)` — émet `unlock_cart`, retourne une Promise
-- `stopCart()` — émet `stop_cart`
+- `requestPairing(cartId)` — émet `request_pairing`, retourne une Promise
+- `releaseCart()` — libère le chariot
 - `onCartStatus(cb)` / `onAlert(cb)` — abonnements (retournent un unsubscribe)
-- Fonctions admin : `adminMove`, `adminForceStop`, `adminRecall`, `getFleet`
+- Fonctions admin : `adminMove`, `adminForceStop`, `adminRecall`, `getFleet`, `kickUser`
 
-Les vues Vue n'interagissent **jamais directement** avec Socket.IO — elles passent toujours par ce module.
+Les vues Vue n'interagissent **jamais directement** avec Socket.IO.
 
 ---
 
+#### 2.6 Application Desktop Electron
 
+> "L'app Vue tourne comme une vraie application desktop grâce à Electron, sans changer une ligne de code Vue."
 
+`vite-plugin-electron` est intégré dans `app/vite.config.js` : `npm run dev` lance Vite et ouvre automatiquement la fenêtre Electron avec hot-reload. `electron/main.js` charge `VITE_DEV_SERVER_URL` en dev et `dist/index.html` en prod. `npm run app:build` génère un installeur natif dans `release/`.
 
-
-
-
-
-
------------------------------------------
+---
 
 ## Vue d'ensemble
 
-Système de gestion de flotte de chariots à bagages connectés pour aéroport. Trois acteurs : l'**utilisateur** (agent au sol qui déverrouille et utilise un chariot), l'**administrateur** (superviseur qui surveille et pilote à distance la flotte), et le **chariot** lui-même (Raspberry Pi embarqué qui envoie les données capteurs).
+Système de gestion de flotte de chariots à bagages connectés pour aéroport.
 
 **Stack :**
 - Backend : Node.js + Express + Socket.IO + PostgreSQL + Redis
 - Frontend : Vue 3 + Vite + Pinia + Vue Router
+- Desktop : Electron (via `vite-plugin-electron`)
 - Infra dev : Docker Compose (Postgres, Redis, pgAdmin)
+- Hardware : Raspberry Pi 3B
 
 ---
 
@@ -245,78 +216,81 @@ Système de gestion de flotte de chariots à bagages connectés pour aéroport. 
 ```
 plume/
 ├── server/
-│   ├── index.js          — serveur Express + Socket.IO
-│   ├── db.js             — accès PostgreSQL + Redis
-│   ├── auth.js           — middleware JWT
-│   ├── rooms.js          — gestionnaire de rooms (stub)
-│   ├── schema.sql        — schéma BDD
-│   ├── seed-users.js     — insertion utilisateurs de test
-│   ├── simulate-cart.js  — simulateur de chariot IoT
+│   ├── index.js           — serveur Express + Socket.IO
+│   ├── db.js              — accès PostgreSQL + Redis
+│   ├── auth.js            — middleware JWT
+│   ├── rooms.js           — RoomManager + batch flush commandes
+│   ├── schema.sql         — schéma BDD (auto-exécuté par Docker)
+│   ├── seed-users.js      — insertion utilisateurs de test
+│   ├── simulate-cart.js   — simulateur de chariot IoT
 │   └── events/
-│       ├── cart.js       — handlers WebSocket côté chariot
-│       ├── user.js       — handlers WebSocket côté utilisateur
-│       └── admin.js      — handlers WebSocket côté admin
-└── app/
-    └── src/
-        ├── api/socket.js       — client WebSocket frontend
-        ├── store/cart.js       — état global Pinia
-        ├── router/index.js     — routes Vue
-        └── views/
-            ├── ScanView.vue    — login + déverrouillage chariot
-            ├── TrackingView.vue — suivi temps réel (utilisateur)
-            └── AdminView.vue   — tableau de bord admin
-raspberry/
-├── package.json          — dépendances (socket.io-client)
-├── config.js             — SERVER_URL, CART_ID, CART_SECRET (à modifier par chariot)
-├── cart_client.js        — script principal du chariot
-└── sensors/
-    ├── imu.js            — accéléromètre/gyroscope (stub → remplacer par I2C réel)
-    ├── weight.js         — cellule de charge HX711 (stub)
-    ├── battery.js        — INA219 (stub, décharge simulée progressive)
-    └── distance.js       — HC-SR04 ultrason (stub)
+│       ├── cart.js        — handlers WebSocket côté chariot
+│       ├── user.js        — handlers WebSocket côté utilisateur
+│       └── admin.js       — handlers WebSocket côté admin
+├── app/
+│   ├── electron/
+│   │   └── main.js        — processus principal Electron
+│   ├── vite.config.js     — Vite + plugin Electron + Vue
+│   └── src/
+│       ├── api/socket.js       — client WebSocket singleton
+│       ├── store/cart.js       — état global Pinia
+│       ├── router/index.js     — routes Vue
+│       └── views/
+│           ├── CartUnlockView.vue      — scan QR + pairing
+│           ├── UserSessionView.vue     — suivi temps réel (utilisateur)
+│           ├── AdminLoginView.vue      — login admin
+│           ├── AdminCartSelectView.vue — sélection chariot admin
+│           └── AdminView.vue           — dashboard flotte
+└── raspberry/
+    ├── config.js          — SERVER_URL, CART_ID, CART_SECRET
+    ├── cart_client.js     — script principal du chariot
+    └── sensors/
+        ├── imu.js         — accéléromètre/gyroscope (stub I2C)
+        ├── weight.js      — cellule de charge HX711 (stub)
+        ├── battery.js     — INA219 (stub, décharge simulée)
+        └── distance.js    — HC-SR04 ultrason (stub)
 ```
 
 ---
 
-## Ce que je sais sur le projet
-
+## PROJET
 ### Fonctionnalités implémentées
 
 **Côté utilisateur**
-- Connexion HTTP (POST `/login`) avec username/password → JWT
-- Connexion WebSocket authentifiée avec le JWT
-- Déverrouillage d'un chariot par saisie manuelle de l'ID (`C-001`, `C-002`…)
-- Réception en temps réel des données capteurs : poids, batterie, vitesse
-- Réception des alertes obstacles
-- Arrêt du suivi et libération du chariot
+- Login HTTP (POST `/login`) → JWT
+- Connexion WebSocket authentifiée
+- Scan QR code du chariot → `CartUnlockView.vue`
+- Pairing physique (`request_pairing` + confirmation bouton robot, timeout 60 s)
+- Données capteurs temps réel : poids, batterie, vitesse
+- Alertes obstacles
+- Libération du chariot
 
 **Côté admin**
-- Dashboard flotte complet (tous les chariots)
-- Indicateurs online/offline par chariot
-- Données capteurs temps réel par chariot
-- Position GPS/UWB des chariots
-- Contrôle directionnel (avant, arrière, gauche, droite, stop)
-- Commandes : rappel à la base, arrêt forcé
-- Visualisation de l'utilisateur assigné à chaque chariot
+- Login discret (URL directe `/admin`)
+- Sélection du chariot à surveiller
+- Dashboard flotte : capteurs temps réel, statut, indicateurs online/offline
+- Flux vidéo brut / annoté (IP Tailscale `100.81.175.3:5500`)
+- Contrôles : pad directionnel, arrêt forcé, rappel à la base, kick utilisateur
 
 **Backend**
-- Authentification JWT + contrôle d'accès par rôle (`user`, `admin`, `cart`)
-- Route `POST /cart-token` : les chariots s'authentifient avec un secret partagé (`CART_SECRET`) et reçoivent un JWT 30 jours
-- PostgreSQL : registre utilisateurs (bcrypt) + registre chariots
-- Redis : état temps réel des chariots (`ownerId`, `status`)
-- `RoomManager` (`rooms.js`) : centralise nommage des rooms, suivi mémoire (chariots connectés, utilisateurs assignés), helpers `toCart` / `toUser` / `toAdmins` — intégré dans les 3 handlers d'events
-- Rooms Socket.IO : `cart:<id>`, `user_of:<id>`, `carts`, `admins`
-- Simulateur de chariot (`simulate-cart.js`) pour tests
+- JWT + contrôle d'accès par rôle (`user`, `admin`, `cart`)
+- Route `/cart-token` : JWT 30 jours pour chariots
+- PostgreSQL : utilisateurs (bcrypt) + registre chariots
+- Redis : état temps réel (`ownerId`, `status`)
+- RoomManager complet (`rooms.js`) avec batch flush de commandes toutes les 1000 ms
+- Simulateur de chariot pour démos sans hardware
 
-**Raspberry Pi (`raspberry/`)**
-- `cart_client.js` : récupère son JWT au démarrage via `/cart-token`, se connecte au WebSocket avec reconnexion automatique
-- Envoie `sensor_data` (poids, batterie, vitesse, IMU) toutes les secondes
-- Détecte les obstacles et émet `obstacle_alert` avec severité (`warning` / `critical`)
+**Raspberry Pi**
+- JWT récupéré dynamiquement au démarrage via `/cart-token`
+- `sensor_data` toutes les secondes (poids, batterie, vitesse, IMU)
+- `obstacle_alert` avec sévérité (`warning` / `critical`)
 - Retour à la base automatique si batterie ≤ 5 %
-- Répond aux commandes `cmd` : `start_tracking`, `stop`, `move`, `return_to_base`
-- Stubs capteurs commentés avec le code GPIO/I2C réel à brancher
+- Commandes : `start_tracking`, `stop`, `move`, `return_to_base`
 
-### Schéma BDD PostgreSQL
+**Application desktop**
+- Electron intégré via `vite-plugin-electron` — même code Vue, fenêtre native
+
+### Schéma BDD
 
 ```sql
 users  (id, username, password_hash, role)
@@ -333,59 +307,29 @@ carts  (cart_id)   -- C-001, C-002, C-042
 
 ## Ce qu'il me manque comme information
 
-1. **Matériel Raspberry Pi** — quel modèle exact, quels capteurs sont branchés (IMU, capteur de poids, capteur de distance/obstacle, GPS ou UWB ?), sur quels pins/bus (I2C, SPI, UART) ?
-==> Kit Raspberry P3B 
 
-2. **Identifiants des chariots** — le `cart_id` est configuré dans `raspberry/config.js` de chaque Raspberry Pi. Le token JWT est obtenu dynamiquement au démarrage via `POST /cart-token` (plus besoin de le hard-coder).
+### Encore ouvert
 
-3. **Réseau** — les Raspberry Pi et le serveur sont-ils sur le même réseau local (aéroport) ou via internet ? Y a-t-il un VPN, un proxy inverse (Nginx), du TLS ?
-==> Via Wifi local (aucun VPN, proxy, TLS...)
+- **Que se passe-t-il si un chariot se déconnecte en cours d'usage ?**
+  L'état Redis reste `in_use` indéfiniment. Règle métier à définir : libération automatique après TTL, ou notification admin ?
 
-4. **Carte de déploiement** — le serveur tourne-t-il en local ou est-il hébergé (VM, cloud) ? Quelle est l'URL de production ?
-==> Server local (localhost:3000), pas de déploiement prévu pour l'instant
+- **Que se passe-t-il si un utilisateur ne rend pas le chariot ?**
+  Pas de règle métier implémentée. Options : timeout session côté serveur, rappel à la base forcé par admin.
 
-5. **QR Code** — le QR code doit-il être physiquement collé sur le chariot et encoder le `cart_id` ? Quel format ?
-Oui, collé sur le chariot et encode le cart_id (entier, pas de lettre pour éviter les erreurs de saisie)
-
-6. **Interface cartographique** — la position `{x, y}` est-elle en coordonnées GPS réelles ou un système UWB local ? Une carte doit-elle être affichée dans AdminView ?
-==> Pas de carte dans admin_view, pas de coordonée (position).
-Récupérer la position du chariot (via JSON) pour les méthodes de retour_base/esquive_obstacle ...
-
-7. **Règles métier manquantes** — que se passe-t-il si un chariot se déconnecte en cours d'usage ?
-==> ?
- Si la batterie atteint 0 % ?
-==> retour_base et on change son état pour qu'il ne puisse pas se pairer
-Si un utilisateur ne rend pas le chariot ?
-==> ?
 ---
 
 ## Ce qui manque pour que le projet soit fonctionnel
 
-### 1. Scan QR Code (priorité moyenne)
-
-Dans `ScanView.vue`, le placeholder existe mais n'est pas implémenté. Il faut :
-- Intégrer une bibliothèque de scan caméra (ex. `html5-qrcode` ou `@zxing/browser`)
-- Le QR code physique encode simplement le `cart_id` (ex. `C-001`)
-- Au scan : remplir automatiquement le champ cartId et déclencher `unlock_cart`
-
-```bash
-cd plume/app && npm install html5-qrcode
-```
-
-### 2. Carte de position dans AdminView
-
-La position `{x, y}` est reçue mais affichée uniquement en texte. Il manque une visualisation (mini-carte SVG ou canvas représentant le plan de l'aéroport avec les chariots positionnés dessus).
-
-### 3. Gestion de la déconnexion du chariot
+**Gestion de la déconnexion du chariot (priorité haute)**
 
 Si le Raspberry perd le réseau en cours d'usage :
-- Le serveur émet `cart_offline` aux admins (déjà implémenté)
-- Mais l'état Redis reste `in_use` → le chariot est bloqué indéfiniment
-- Il faut un timeout Redis (ex. TTL 30s, refreshé par chaque `sensor_data`) et une logique de libération automatique
+- Le serveur émet `cart_offline` aux admins ✅
+- Mais l'état Redis reste `in_use` → chariot bloqué indéfiniment
+- Solution : TTL Redis 30 s rafraîchi par chaque `sensor_data` + libération automatique à expiration
 
-### 4. Reconnexion automatique WebSocket (frontend)
+**Reconnexion WebSocket frontend**
 
-Le Raspberry Pi gère déjà la reconnexion automatique avec backoff exponentiel (`reconnectionDelayMax: 30s`). Il reste à gérer côté frontend : le store Pinia doit relancer `unlock_cart` après une reconnexion WebSocket pour rebinder l'utilisateur à son chariot.
+Le Raspberry gère déjà la reconnexion avec backoff exponentiel. Il reste à gérer côté Vue : après coupure réseau, le store Pinia doit relancer `request_pairing` pour rebinder l'utilisateur à son chariot.
 
 ---
 
@@ -393,10 +337,7 @@ Le Raspberry Pi gère déjà la reconnexion automatique avec backoff exponentiel
 
 ```
 [Raspberry Pi]
-     │
-     │  WebSocket (Socket.IO)
-     │  JWT { role: 'cart', cartId: 'C-001' }
-     │
+     │  WebSocket · JWT { role: 'cart', cartId: 'C-001' }
      ▼
 [Serveur Node.js :3000]
      │
@@ -404,10 +345,10 @@ Le Raspberry Pi gère déjà la reconnexion automatique avec backoff exponentiel
      │
      ├──► Room 'admins'  ──────► [AdminView.vue]
      │         sensor_update         (dashboard flotte)
-     │         cart_position
-     │         obstacle alert
+     │         cart_online/offline
+     │         obstacle_alert
      │
-     └──► Room 'user_of:C-001' ► [TrackingView.vue]
+     └──► Room 'user_of:C-001' ► [UserSessionView.vue]
                cart_status          (poids, batterie, vitesse)
                alert
 ```
@@ -418,7 +359,7 @@ Le Raspberry Pi gère déjà la reconnexion automatique avec backoff exponentiel
      │  admin:move { cartId, direction }
      ▼
 [Serveur]
-     │  cmd { action: 'move', direction }
+     │  cmd { action: 'move', direction }  (dans le batch JSON)
      ▼
 [Raspberry Pi] → contrôle moteurs
 ```
@@ -430,11 +371,12 @@ Le Raspberry Pi gère déjà la reconnexion automatique avec backoff exponentiel
 | Événement | Direction | Rôle émetteur | Payload |
 |---|---|---|---|
 | `sensor_data` | Chariot → Serveur | `cart` | `{ weightKg, batteryPct, speedMs, accelX/Y/Z, gyroX/Y/Z }` |
-| `obstacle_alert` | Chariot → Serveur | `cart` | `{ severity: 'warning'\|'critical', distanceCm }` 
+| `obstacle_alert` | Chariot → Serveur | `cart` | `{ severity: 'warning'\|'critical', distanceCm }` |
 | `position_update` | Chariot → Serveur | `cart` | `{ x, y }` |
-| `cmd` | Serveur → Chariot | — | `{ action: 'start_tracking'\|'stop'\|'move'\|'return_to_base', direction? }` |
-| `unlock_cart` | Frontend → Serveur | `user` | `{ cartId }` |
-| `stop_cart` | Frontend → Serveur | `user` | `{}` |
+| `cmd` | Serveur → Chariot | — | `{ cartId, status, alerts: [], cmds: [{ id, action, args }] }` |
+| `request_pairing` | Frontend → Serveur | `user` | `{ cartId }` |
+| `pairing_confirmed` | Serveur → Frontend | — | `{ cartId }` |
+| `release_cart` | Frontend → Serveur | `user` | `{}` |
 | `cart_status` | Serveur → Frontend | — | `{ cartId, weightKg, batteryPct, speedMs }` |
 | `alert` | Serveur → Frontend | — | `{ type: 'obstacle'\|'forced_stop', severity? }` |
 | `admin:move` | Admin → Serveur | `admin` | `{ cartId, direction }` |
@@ -444,58 +386,103 @@ Le Raspberry Pi gère déjà la reconnexion automatique avec backoff exponentiel
 | `sensor_update` | Serveur → Admin | — | `{ cartId, ...données complètes }` |
 | `cart_online` | Serveur → Admin | — | `{ cartId, timestamp }` |
 | `cart_offline` | Serveur → Admin | — | `{ cartId }` |
-| `cart_position` | Serveur → Admin | — | `{ cartId, x, y }` |
-
 
 | Room | Nom réel | Membres | Utilisée pour |
 |---|---|---|---|
-| `cartRoom(cartId)` | `cart:C-001` | Le Raspberry de ce chariot | Envoyer les cmd à un chariot précis |
-| `allCartsRoom` | `carts` | Tous les Raspberrys connectés | Broadcast global (non utilisé actuellement) |
-| `userRoom(cartId)` | `user_of:C-001` | L'utilisateur assigné au chariot | Envoyer `cart_status`, `alert` à l'utilisateur |
-| `allAdminsRoom` | `admins` | Tous les admins connectés | Envoyer `cart_online`, `cart_offline`, `sensor_update`, `cart_position`, `alert` aux admins |
+| `cartRoom(id)` | `cart:C-001` | Le Raspberry | Commandes `cmd` (batch) |
+| `userRoom(id)` | `user_of:C-001` | L'utilisateur pairé | `cart_status`, `alert` |
+| `allAdminsRoom` | `admins` | Tous les admins | `sensor_update`, `cart_online/offline`, `alert` |
+| `allCartsRoom` | `carts` | Tous les Raspberry | Broadcast global (non utilisé) |
 
 
 ---
 
-## Lancer le projet
+## Déploiement sur Raspberry Pi
 
 ```bash
-# 1. Bases de données (Postgres + Redis)
-docker compose up -d
-
-# 2. Schéma + seed (première fois seulement)
-docker compose exec postgres psql -U postgres -d plume -f /schema.sql
-node plume/server/seed-users.js
-
-# 3. Serveur backend (port 3000)
-node plume/server/index.js
-
-# 4. Frontend (port 5173)
-cd plume/app && npm run dev
-
-# 5. Simulateur de chariot (optionnel, remplace le Raspberry)
-node plume/server/simulate-cart.js
+# Sur le Raspberry Pi (une seule fois)
+git clone https://github.com/RaphPicard/Plume.git
+cd raspberry
+npm install
 ```
 
-**Comptes de test :**
-| Rôle | Login | Mot de passe |
-|---|---|---|
-| Admin | `raphou` | `raphou` |
-| Utilisateur | `evan` | `evan` |
+Éditer `config.js` : renseigner `SERVER_URL` (IP du serveur sur le réseau Wifi local) et `CART_ID` (ex. `C-001`).
+
+```bash
+npm start
+```
+
+---
+
+## État d'avancement
+
+### ✅ Authentification & Sécurité
+
+- **JWT utilisateurs** — login via `POST /login`, token stocké en localStorage côté client.
+- **JWT chariots** — route `POST /cart-token` : JWT 30 jours via secret partagé. Plus de hard-coding.
+- **Guard router admin** — `router.beforeEach` vérifie le JWT avant chaque accès `/admin/*`.
+- **Persistance session admin** — `api/adminAuth.js` via localStorage, vérification expiration JWT côté client.
+- **Middleware WebSocket** — `auth.js` : valide le JWT, injecte `socket.data.role` avant tout handler.
+
+### ✅ Interface Utilisateur (agent au sol)
+
+- **Scan QR Code** — `CartUnlockView.vue` : QR code collé sur le chariot → URL `/cart/:cartId`. Affiche statut du chariot (online/offline, batterie) ; bouton Déverrouiller actif uniquement si disponible.
+- **Vue session** — `UserSessionView.vue` (`/session`) : données capteurs temps réel, alertes obstacles, bouton libération.
+
+### ✅ Interface Admin
+
+- **Login discret** — `AdminLoginView.vue`, accessible uniquement par URL directe.
+- **Sélection de chariot** — `AdminCartSelectView.vue` (`/admin/select-cart`) : flotte en temps réel.
+- **Dashboard flotte** — `AdminView.vue` (`/admin/dashboard/:cartId`) : capteurs, contrôles directionnels, arrêt forcé, rappel base, kick utilisateur, flux vidéo Tailscale.
+
+### ✅ Flux de Pairing
+
+- Client émet `request_pairing` ; serveur vérifie disponibilité en mémoire.
+- Timeout 60 s côté serveur, annulation possible.
+- Confirmation physique via bouton robot (ou `/simulate/cart-confirm/:cartId` en dev).
+- ⚠️ Pairing en attente stocké dans une `Map` Node.js (`_pairingPending`) — pas dans Redis.
+
+### ✅ Communication Temps Réel (Socket.IO)
+
+- **RoomManager** (`server/rooms.js`) : nommage centralisé, helpers `toCart` / `toUser` / `toAdmins`.
+- **Batch de commandes** toutes les 1000 ms (configurable `CART_FLUSH_MS`) :
+
+```json
+{
+  "cartId": "C-001",
+  "status": "available | paired",
+  "alerts": ["obstacle_detected"],
+  "cmds": [{ "id": "cmd-<uuid>", "action": "move", "args": ["forward"] }]
+}
+```
+
+### ✅ Raspberry Pi
+
+- JWT récupéré dynamiquement au démarrage.
+- `sensor_data` toutes les secondes, `obstacle_alert`, retour base si batterie ≤ 5 %.
+- Reconnexion automatique (backoff exponentiel, max 30 s).
+
+### ✅ Application Desktop Electron
+
+- `vite-plugin-electron` dans `app/vite.config.js` : un seul `npm run dev` lance Vite + Electron.
+- `electron/main.js` : fenêtre 1280×800, `contextIsolation: true`, `nodeIntegration: false`.
+- `npm run app:build` → installeur natif dans `release/` (.exe / .dmg / .AppImage).
 
 ---
 
 ## Priorités d'implémentation
 
-| Priorité | Tâche | Fichier(s) concerné(s) |
-|---|---|---|
-| ✅ Fait | Script Node.js Raspberry Pi | `raspberry/cart_client.js` |
-| ✅ Fait | Authentification JWT pour chariots (`/cart-token`) | `plume/server/index.js` |
-| ✅ Fait | RoomManager complet et intégré | `plume/server/rooms.js`, `events/*.js` |
-| 🟠 Important | Scan QR code | `plume/app/src/views/ScanView.vue` |
-| 🟠 Important | Gestion déconnexion + TTL Redis | `plume/server/events/cart.js`, `plume/server/db.js` |
-| 🟡 Utile | Reconnexion WebSocket frontend (re-unlock après coupure) | `plume/app/src/api/socket.js`, `plume/store/cart.js` |
-| 🟢 Nice-to-have | Carte de position admin | `plume/app/src/views/AdminView.vue` |
-| 🟢 Nice-to-have | Restreindre CORS en production | `plume/server/index.js` |
-
-
+| Priorité | Statut | Tâche | Fichier(s) |
+|---|---|---|---|
+| — | ✅ Fait | Script Node.js Raspberry Pi | `raspberry/cart_client.js` |
+| — | ✅ Fait | Authentification JWT chariots (`/cart-token`) | `server/index.js` |
+| — | ✅ Fait | RoomManager + batch flush commandes | `server/rooms.js`, `events/*.js` |
+| — | ✅ Fait | Scan QR code | `app/src/views/CartUnlockView.vue` |
+| — | ✅ Fait | Application Desktop Electron | `app/electron/main.js`, `app/vite.config.js` |
+| 🔴 | ❌ À faire | Migrer pairing en attente vers Redis | `server/events/user.js`, `server/db.js` |
+| 🔴 | ❌ À faire | Gestion déconnexion + TTL Redis | `server/events/cart.js`, `server/db.js` |
+| 🟠 | ❌ À faire | Tracking ACK/exec/skip commandes | `server/rooms.js` |
+| 🟠 | ❌ À faire | Reconnexion WS frontend (re-pairing) | `app/src/api/socket.js`, `app/src/store/cart.js` |
+| 🟡 | ❌ À faire | IDs chariots entiers (C-042 → 42) | `server/schema.sql`, `raspberry/config.js` |
+| 🟢 | ❌ À faire | Restreindre CORS en production | `server/index.js` |
+| — | 🚫 Abandonné | Carte de position dans AdminView | — |
