@@ -486,3 +486,64 @@ npm start
 | 🟡 | ❌ À faire | IDs chariots entiers (C-042 → 42) | `server/schema.sql`, `raspberry/config.js` |
 | 🟢 | ❌ À faire | Restreindre CORS en production | `server/index.js` |
 | — | 🚫 Abandonné | Carte de position dans AdminView | — |
+
+
+# ✅ FAIT — Gestion du suivi autonome
+## Gestion du suivi autonome
+
+**Implémenté dans `server/tracking-ws.js` (monté dans `server/index.js`).**
+
+Le serveur caméra (Python/RPi) se connecte à notre backend via WebSocket brut (`ws`, pas Socket.IO) :
+```
+ws://<backend>:3000/data?cartId=C-001&secret=<CAMERA_SECRET>
+```
+Le secret est défini dans `.env` sous `CAMERA_SECRET`.
+
+Format des données reçues :
+```json
+{
+  "mode": "idle" | "registering" | "tracking",
+  "persons": [
+    {
+      "is_target": false,
+      "distance": 3.2,
+      "angle": -12,
+      "conf": 0.87,
+      "similarity": 0.74
+    }
+  ]
+}
+```
+
+### Logique de suivi
+Les commandes sont émises **directement** (hors file de flush) vers le chariot via l'event Socket.IO `tracking_cmd` :
+```json
+{ "speed": 0.0–1.0, "angular": -1.0–1.0, "mode": "tracking" }
+```
+
+| Condition | Comportement |
+|---|---|
+| `mode !== "tracking"` | Arrêt (`speed=0, angular=0`) |
+| Aucune personne avec `is_target: true` | Arrêt |
+| `conf < 0.5` | Détection ignorée |
+| `distance < 0.8 m` | Arrêt de sécurité |
+| `0.8 m < distance < 1.5 m` | Vitesse 0 (distance idéale atteinte) |
+| `1.5 m < distance < 3.5 m` | Vitesse proportionnelle à la distance |
+| `distance > 3.5 m` | Vitesse maximale (1.0) |
+| `\|angle\| > 8°` | Rotation proportionnelle (`-angle / 45`, clampé à [-1, 1]) |
+| `\|angle\| ≤ 8°` | Pas de rotation (zone morte) |
+
+> `angle` négatif = cible à gauche → `angular` positif (tourne à gauche).
+
+### Côté chariot (RPi) — à implémenter
+Écouter l'event `tracking_cmd` :
+```js
+socket.on('tracking_cmd', ({ speed, angular, mode }) => {
+  // Piloter les moteurs avec speed et angular
+})
+```
+
+### Monitoring admins
+Deux nouveaux events émis vers tous les admins :
+- `tracking_status` → `{ cartId, online: bool }` — connexion/déconnexion du serveur caméra
+- `tracking_update` → `{ cartId, mode, persons }` — données brutes à chaque frame

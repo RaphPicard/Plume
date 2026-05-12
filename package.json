@@ -21,7 +21,8 @@
     "pg": "^8.13.3",
     "bcryptjs": "^2.4.3",
     "socket.io": "^4.8.3",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "ws": "^8.18.3"
   },
   "repository": {
     "type": "git",
