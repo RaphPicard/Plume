@@ -10,8 +10,17 @@ const cors    = require('cors')           // pour autoriser les requêtes cross-
 const { getUserByUsername, getCartState } = require('./db')  // accès PostgreSQL
 const { init: initUserEvents, confirmPairing } = require('./events/user')
 
+const { initTrackingWs } = require('./tracking-ws') // module de suivi automatique des chariots (position, batterie, etc.) via WebSocket (serveur caméra)
+
 const app = express()
-app.use(cors({ origin: 'http://localhost:5173' }))
+// En dev, Vite peut démarrer sur un port différent de 5173 si le port est déjà pris
+// (5174, 5175...) — on accepte n'importe quel localhost pour éviter les erreurs CORS.
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin || /^http:\/\/localhost(:\d+)?$/.test(origin)) cb(null, true)
+    else cb(new Error('CORS: origine non autorisée'))
+  }
+}))
 app.use(express.json())
 
 const SECRET      = process.env.JWT_SECRET
@@ -125,6 +134,7 @@ const io = new Server(httpServer, {
 
 const rooms = new RoomManager(io);
 initUserEvents(io, rooms);
+initTrackingWs(httpServer, rooms); // initialisation du serveur de suivi des chariots (tracking-ws.js) qui utilise aussi Socket.IO mais sur un namespace différent (/tracking) pour ne pas mélanger les événements de contrôle et de suivi
 
 
 

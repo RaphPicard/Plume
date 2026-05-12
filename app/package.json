@@ -3,13 +3,16 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
+    "dev:admin": "cross-env ELECTRON_ENTRY_PATH=/admin vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "app:build": "vite build && electron-builder"
   },
   "dependencies": {
-    "@zxing/browser": "^0.2.0", 
+    "@zxing/browser": "^0.2.0",
     "pinia": "^3.0.4",
     "socket.io-client": "^4.8.3",
     "vue": "^3.5.30",
@@ -17,6 +20,30 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.5",
-    "vite": "^8.0.0"
+    "cross-env": "^10.1.0",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "vite": "^8.0.0",
+    "vite-plugin-electron": "^0.28.8"
+  },
+  "build": {
+    "appId": "com.plume.fleet",
+    "productName": "PLUME",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   }
 }
