@@ -51,6 +51,57 @@ function registerCartEvents(io, socket, rooms) {    // appelé dans server.js lo
   socket.on('position_update', ({ x, y }) => {
     rooms.toAdmins('cart_position', { cartId, x, y });
   });
+
+  // --- Auto-tracking ---
+  socket.on('tracking_person_detected', ({ status, tracking }) => {
+    console.log(`[tracking_person_detected] ${cartId} → ${status}`);
+    rooms.setCartStatus(cartId, status);
+
+    // Notifier les watchers (avant session)
+    rooms.io.to(rooms.watcherRoom(cartId)).emit('cart_availability', {
+      cartId,
+      online: true,
+      batteryPct: rooms.getCachedBattery(cartId),
+      status: status,
+    });
+
+    // Notifier les admins
+    rooms.toAdmins('cart_status_update', {
+      cartId,
+      status: status,
+      ownerId: rooms._cartOwners.get(cartId) ?? null,
+    });
+
+    // Notifier l'utilisateur en session
+    rooms.toUser(cartId, 'cart_status_update', {
+      status: status,
+    });
+  });
+
+  socket.on('tracking_person_stopped', ({ status, tracking }) => {
+    console.log(`[tracking_person_stopped] ${cartId} → ${status}`);
+    rooms.setCartStatus(cartId, status);
+
+    // Notifier les watchers
+    rooms.io.to(rooms.watcherRoom(cartId)).emit('cart_availability', {
+      cartId,
+      online: true,
+      batteryPct: rooms.getCachedBattery(cartId),
+      status: status,
+    });
+
+    // Notifier les admins
+    rooms.toAdmins('cart_status_update', {
+      cartId,
+      status: status,
+      ownerId: rooms._cartOwners.get(cartId) ?? null,
+    });
+
+    // Notifier l'utilisateur en session
+    rooms.toUser(cartId, 'cart_status_update', {
+      status: status,
+    });
+  });
 }
 
 module.exports = { registerCartEvents };

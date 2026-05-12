@@ -207,3 +207,27 @@ export function adminMove(cartId, direction) {
 export function adminRecall(cartId) {
   socket.emit('admin:recall', { cartId })
 }
+
+export function startAutoTracking() {
+  return new Promise((resolve, reject) => {
+    socket.emit('start_auto_tracking', {}, (response) => {
+      if (response?.ok) resolve(response)
+      else reject(new Error(response?.error || 'Erreur auto-tracking'))
+    })
+  })
+}
+
+export function onAutoTrackingStarted(callback) {
+  socket.on('auto_tracking_started', callback)
+  return () => socket.off('auto_tracking_started', callback)
+}
+
+export function onAutoTrackingStopped(callback) {
+  socket.on('auto_tracking_stopped', callback)
+  return () => socket.off('auto_tracking_stopped', callback)
+}
+
+export function onCartStatusUpdateEvent(callback) {
+  socket.on('cart_status_update', callback)
+  return () => socket.off('cart_status_update', callback)
+}

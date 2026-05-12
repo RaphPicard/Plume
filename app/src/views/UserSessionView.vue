@@ -47,6 +47,21 @@
       </div>
     </div>
 
+    <button
+      class="register-btn"
+      :class="{ registering: registering, success: registerSuccess, tracking: store.cartStatus?.status === 'auto_tracking' }"
+      @click="registerPerson"
+      :disabled="registering || registerSuccess || store.cartStatus?.status === 'auto_tracking'"
+    >
+      <span class="register-label">
+        <template v-if="store.cartStatus?.status === 'auto_tracking'">👁 Personne suivie</template>
+        <template v-else-if="registerSuccess">✓ Personne repérée</template>
+        <template v-else-if="!registering">📷 Enregistrer la personne à suivre</template>
+        <template v-else>⏱ Enregistrement... {{ registerCountdown }}s</template>
+      </span>
+      <div v-if="registering" class="register-bar"></div>
+    </button>
+
     <button class="stop-btn" @click="handleTerminer">
       Terminer la session
     </button>
@@ -58,7 +73,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCartStore } from '../store/cart'
-import { connectSocket, stopCart, onCartStatus, onAlert, onKicked } from '../api/socket'
+import { connectSocket, stopCart, onCartStatus, onAlert, onKicked, startAutoTracking, onAutoTrackingStarted, onAutoTrackingStopped, onCartStatusUpdateEvent } from '../api/socket'
 import { getScanSession, saveScanSession } from '../api/scanAuth'
 
 const router = useRouter()
@@ -82,6 +97,13 @@ let elapsedTimer    = null
 let unsubCartStatus = null
 let unsubAlert      = null
 let unsubKicked     = null
+let unsubAutoTrackingStarted = null
+let unsubAutoTrackingStopped = null
+let unsubCartStatusUpdate = null
+const registering = ref(false)
+const registerCountdown = ref(10)
+const registerSuccess = ref(false)
+let registerTimer = null
 
 const elapsedFormatted = computed(() => {
   const m    = Math.floor(elapsed.value / 60)
@@ -95,17 +117,61 @@ async function handleTerminer() {
   router.push('/')
 }
 
+async function registerPerson() {
+  if (registering.value || registerSuccess.value) return
+  registering.value = true
+  registerCountdown.value = 10
+
+  try {
+    await fetch('http://100.81.175.3:8001/command/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ duration: 10 }),
+    })
+  } catch (e) {
+    // serveur injoignable : on laisse le décompte tourner quand même
+  }
+
+  let elapsedSecs = 0
+  registerTimer = setInterval(() => {
+    elapsedSecs++
+    registerCountdown.value = 10 - elapsedSecs
+    if (elapsedSecs >= 10) {
+      clearInterval(registerTimer)
+      registering.value = false
+      registerSuccess.value = true
+      // Passer en auto-tracking après 10 secondes (local + serveur)
+      store.updateStatus({ ...store.cartStatus, status: 'auto_tracking' })
+      startAutoTracking().catch(e => console.error('Auto-tracking error:', e))
+    }
+  }, 1000)
+}
+
 onMounted(async () => {
   if (!store.hasActiveCart) {
     router.replace('/')
     return
   }
 
-  unsubCartStatus = onCartStatus(status => store.updateStatus(status))
+  unsubCartStatus = onCartStatus(data => {
+    // Préserver le status local (auto_tracking, paired, etc.) qui n'est pas dans les sensor_data
+    store.updateStatus({ ...data, status: store.cartStatus?.status })
+  })
   unsubAlert      = onAlert(alert => store.addAlert(alert))
   unsubKicked     = onKicked(() => {
     store.clearActiveCart()
     router.replace('/')
+  })
+  unsubAutoTrackingStarted = onAutoTrackingStarted(() => {
+    store.updateStatus({ ...store.cartStatus, status: 'auto_tracking' })
+  })
+  unsubAutoTrackingStopped = onAutoTrackingStopped(() => {
+    store.updateStatus({ ...store.cartStatus, status: 'paired' })
+    registerSuccess.value = false
+  })
+
+  unsubCartStatusUpdate = onCartStatusUpdateEvent(({ status }) => {
+    store.updateStatus({ ...store.cartStatus, status })
   })
 
   try {
@@ -125,9 +191,13 @@ onMounted(async () => {
 
 onUnmounted(() => {
   clearInterval(elapsedTimer)
+  clearInterval(registerTimer)
   unsubCartStatus?.()
   unsubAlert?.()
   unsubKicked?.()
+  unsubAutoTrackingStarted?.()
+  unsubAutoTrackingStopped?.()
+  unsubCartStatusUpdate?.()
 })
 </script>
 
@@ -253,6 +323,60 @@ onUnmounted(() => {
   font-size: 13px;
   color: #f87171;
   margin-bottom: 8px;
+}
+
+.register-btn {
+  width: 100%;
+  padding: 16px;
+  background: rgba(249,115,22,0.12);
+  border: 1px solid rgba(249,115,22,0.3);
+  color: #fb923c;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+.register-btn.registering {
+  opacity: 0.85;
+  cursor: not-allowed;
+}
+
+.register-btn.success {
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.3);
+  color: #4ade80;
+  cursor: not-allowed;
+}
+
+.register-btn.tracking {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.5);
+  color: #4ade80;
+  cursor: not-allowed;
+}
+
+.register-label {
+  position: relative;
+  z-index: 1;
+}
+
+.register-bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  background: #fb923c;
+  width: 0;
+  animation: register-fill 10s linear forwards;
+}
+
+@keyframes register-fill {
+  from { width: 0; }
+  to   { width: 100%; }
 }
 
 .stop-btn {

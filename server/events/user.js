@@ -130,6 +130,17 @@ function registerUserEvents(io, socket, rooms) {
     }
   })
 
+  // --- Passer en mode auto-tracking ---
+  socket.on('start_auto_tracking', async (_, callback) => {
+    const cartId = socket.data.activeCartId
+    if (!cartId) return callback?.({ ok: false, error: 'Pas de chariot actif' })
+
+    rooms.setCartStatus(cartId, 'auto_tracking')
+    rooms.toUser(cartId, 'cart_status_update', { status: 'auto_tracking' })
+
+    callback?.({ ok: true })
+  })
+
   // --- Arrêt du suivi ---
   socket.on('stop_cart', async (_, callback) => {
     const cartId = socket.data.activeCartId
