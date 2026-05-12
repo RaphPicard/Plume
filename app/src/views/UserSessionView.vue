@@ -117,32 +117,77 @@ async function handleTerminer() {
   router.push('/')
 }
 
+let commandWs = null
+
+function cleanupRegistration() {
+  if (registerTimer) {
+    clearInterval(registerTimer)
+    registerTimer = null
+  }
+  if (commandWs) {
+    commandWs.close()
+    commandWs = null
+  }
+}
+
 async function registerPerson() {
   if (registering.value || registerSuccess.value) return
   registering.value = true
   registerCountdown.value = 10
 
-  try {
-    await fetch('http://100.81.175.3:8001/command/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ duration: 10 }),
-    })
-  } catch (e) {
-    // serveur injoignable : on laisse le décompte tourner quand même
-  }
+  // 1. Ouvrir le WebSocket /command pour écouter le statut
+  commandWs = new WebSocket('ws://100.81.175.3:8001/command')
 
+  commandWs.addEventListener('message', (event) => {
+    let msg
+    try {
+      msg = JSON.parse(event.data)
+    } catch (e) {
+      console.error('[WS /command] JSON parse error:', e)
+      return
+    }
+    console.log('[WS /command]', msg)
+
+    if (msg.status === 'register_ok') {
+      cleanupRegistration()
+      registering.value = false
+      registerSuccess.value = true
+      store.updateStatus({ ...store.cartStatus, status: 'auto_tracking' })
+      startAutoTracking().catch(e => console.error('Auto-tracking error:', e))
+    } else if (msg.status === 'register_failed') {
+      console.error('[WS /command] register_failed:', msg.reason)
+      cleanupRegistration()
+      registering.value = false
+      registerCountdown.value = 10
+    }
+  })
+
+  commandWs.addEventListener('error', (err) => console.error('[WS /command] error:', err))
+
+  // 2. Envoyer le POST une fois le WS ouvert
+  commandWs.addEventListener('open', async () => {
+    try {
+      await fetch('http://100.81.175.3:8001/command/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ duration: 10 }),
+      })
+    } catch (e) {
+      console.error('POST register error:', e)
+    }
+  })
+
+  // 3. Lancer l'animation de countdown (purement visuel)
   let elapsedSecs = 0
   registerTimer = setInterval(() => {
     elapsedSecs++
-    registerCountdown.value = 10 - elapsedSecs
-    if (elapsedSecs >= 10) {
-      clearInterval(registerTimer)
+    registerCountdown.value = Math.max(0, 10 - elapsedSecs)
+    // Timeout de sécurité (20s) si on ne reçoit rien
+    if (elapsedSecs >= 20) {
+      console.warn('[register] Timeout sans register_ok')
+      cleanupRegistration()
       registering.value = false
-      registerSuccess.value = true
-      // Passer en auto-tracking après 10 secondes (local + serveur)
-      store.updateStatus({ ...store.cartStatus, status: 'auto_tracking' })
-      startAutoTracking().catch(e => console.error('Auto-tracking error:', e))
+      registerCountdown.value = 10
     }
   }, 1000)
 }
@@ -191,7 +236,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   clearInterval(elapsedTimer)
-  clearInterval(registerTimer)
+  cleanupRegistration()
   unsubCartStatus?.()
   unsubAlert?.()
   unsubKicked?.()
