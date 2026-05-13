@@ -15,8 +15,6 @@ function registerAdminEvents(io, socket, rooms) {
   // --- Arrêt forcé ---
   socket.on('admin:force_stop', ({ cartId }) => {
     rooms.enqueueCmd(cartId, 'stop', []);
-    rooms.enqueueAlert(cartId, 'forced_stop');
-    rooms.toUser(cartId, 'alert', { type: 'forced_stop' }); // notification immédiate vers l'app mobile
   });
 
   // --- Rappel à la base ---

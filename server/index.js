@@ -187,3 +187,21 @@ clearAllCartOwners()
 
 // Démarrer sur le port 3000
   httpServer.listen(3000, '0.0.0.0', () => console.log('Server on :3000 (0.0.0.0)'));  // accessible depuis le réseau local
+
+// Kick tous les users en session quand le serveur s'éteint (Ctrl+C, kill, etc.)
+function gracefulShutdown(signal) {
+  console.log(`\n[shutdown] Signal ${signal} reçu, kick des sessions actives...`)
+  let kickedCount = 0
+  for (const s of io.sockets.sockets.values()) {
+    if (s.data?.activeCartId) {
+      s.emit('kicked', { cartId: s.data.activeCartId, reason: 'server_shutdown' })
+      kickedCount++
+    }
+  }
+  console.log(`[shutdown] ${kickedCount} session(s) kickée(s)`)
+  // Laisser le temps aux messages de partir avant de tuer le process
+  setTimeout(() => process.exit(0), 300)
+}
+
+process.on('SIGINT',  () => gracefulShutdown('SIGINT'))
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))

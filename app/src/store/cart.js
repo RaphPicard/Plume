@@ -49,8 +49,15 @@ export const useCartStore = defineStore('cart', () => {
     cartStatus.value = status
   }
 
+  const ALERT_TTL_MS = 5000
+
   function addAlert(alert) {
-    alerts.value.push({ ...alert, id: Date.now() })
+    const id = Date.now() + Math.random()
+    alerts.value.push({ ...alert, id })
+    // Auto-suppression après 5 secondes
+    setTimeout(() => {
+      alerts.value = alerts.value.filter(a => a.id !== id)
+    }, ALERT_TTL_MS)
   }
 
   function setConnected(val) {

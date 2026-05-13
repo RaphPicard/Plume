@@ -14,28 +14,36 @@ const CART_ID         = 'C-042'
 const RECONNECT_MS    = 3000   // délai avant reconnexion automatique
 
 // ── Paramètres de suivi ────────────────────────────────────────────────────────
-const TARGET_DIST     = 1.5  // m — distance idéale de suivi (le chariot s'arrête ici)
-const MAX_DIST        = 3.5  // m — au-delà, vitesse maximale
-const MIN_DIST        = 0.8  // m — arrêt de sécurité si la cible est trop proche
+// Zones de vitesse selon la distance à la cible :
+//   < STOP_DIST              → vitesse nulle (arrêt de sécurité)
+//   STOP_DIST → RAMP_START   → vitesse nulle (zone tampon)
+//   RAMP_START → RAMP_END    → vitesse linéaire (0 → MAX_SPEED)
+//   > RAMP_END               → vitesse max
+const STOP_DIST       = 0.5  // m — en-dessous: arrêt complet
+const RAMP_START_DIST = 1.0  // m — à partir d'ici la vitesse commence à monter
+const RAMP_END_DIST   = 2.0  // m — au-delà: vitesse max
 const ANGLE_DEAD_ZONE = 2    // ° — zone morte : pas de rotation en-dessous de ce seuil
 const MIN_CONF        = 0.85  // seuil de confiance minimal pour agir sur une détection
 const MAX_ANGLE       = 30   // ° — angle max pour la rotation (au-delà, on tourne à fond)
 
-const MAX_SPEED = 50  // valeur max envoyée au chariot (0–50)
+const MAX_SPEED      = 50  // valeur max envoyée au chariot (0–50)
+const ROTATION_SPEED = 30  // vitesse de rotation sur place quand la cible est trop proche
+
+// Calcule la vitesse linéaire selon la distance à la cible.
+function computeSpeed(distance) {
+  if (distance < RAMP_START_DIST) return 0
+  if (distance >= RAMP_END_DIST) return MAX_SPEED
+  const ratio = (distance - RAMP_START_DIST) / (RAMP_END_DIST - RAMP_START_DIST)
+  return Math.round(ratio * MAX_SPEED)
+}
 
 // ── Calcul de la commande de mouvement ────────────────────────────────────────
-// Retourne { speed, angular } normalisés en 0–1 (usage interne)
 function computeCmd(target) {
   const { distance, angle, conf } = target
 
   if (conf < MIN_CONF) return { speed: 0, angular: 0 }
 
-  let speed = 0
-  if (distance > TARGET_DIST) {
-    speed = Math.min(1, (distance - TARGET_DIST) / (MAX_DIST - TARGET_DIST))
-  }
-  if (distance < MIN_DIST) speed = 0  // arrêt de sécurité
-  speed = Math.round(speed * MAX_SPEED)  // normalisation en 0–MAX_SPEED pour le chariots
+  const speed = computeSpeed(distance)
 
   // angle positif = cible à droite → angular négatif → 'right'
   // angle négatif = cible à gauche → angular positif → 'left'
@@ -57,8 +65,11 @@ function enqueueMove(rooms, speed, angular) {
   }
   if (angular !== 0) {
     const direction = angular > 0 ? 'left' : 'right'
-    const diff = Math.round(Math.abs(angular) * MAX_SPEED)
-    rooms.enqueueCmd(CART_ID, 'move', [direction, speed, diff])
+    // Si la cible est dans la zone tampon (speed = 0) mais à un angle,
+    // on tourne sur place à ROTATION_SPEED.
+    const effectiveSpeed = speed === 0 ? ROTATION_SPEED : speed
+    const diff = Math.round(Math.abs(angular) * effectiveSpeed)
+    rooms.enqueueCmd(CART_ID, 'move', [direction, effectiveSpeed, diff])
   } else {
     rooms.enqueueCmd(CART_ID, 'move', ['forward', speed])
   }
@@ -85,6 +96,7 @@ function initTrackingWs(rooms) {
     ws.on('message', (raw) => {
       let data
       try { data = JSON.parse(raw) } catch { return }
+      console.log(data)
 
       const { mode, persons = [] } = data
       console.log(`[tracking-ws] mode=${mode} | ${persons.length} personne(s)`)
