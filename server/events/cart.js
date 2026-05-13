@@ -7,12 +7,11 @@ function registerCartEvents(io, socket, rooms) {    // appelé dans server.js lo
   rooms.registerCart(socket, cartId); // le Raspberry Pi connecté avec le rôle "cart" est enregistré dans la room correspondante à son cartId, et dans la room de tous les chariots pour que les admins puissent le voir dans la flotte
 
   // Si un utilisateur avait déjà déverrouillé ce chariot (ex: reconnexion du chariot),
-  // lui envoyer start_tracking pour qu'il reprenne l'envoi des capteurs
+  // remettre le status à paired
   const { getCartState } = require('../db');
   getCartState(cartId).then((state) => {
     if (state?.ownerId) {
       rooms.setCartStatus(cartId, 'paired');
-      rooms.enqueueCmd(cartId, 'start_tracking', []); // Le chariot reçoit automatiquement start_tracking au prochain flush
     }
   });
 

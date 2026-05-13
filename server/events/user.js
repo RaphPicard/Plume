@@ -45,8 +45,15 @@ function registerUserEvents(io, socket, rooms) {
     rooms.assignUser(socket, restoredCartId, userId)
     socket.data.activeCartId = restoredCartId
     _activeSocketIds.set(userId, socket.id)
-    rooms.setCartStatus(restoredCartId, 'paired')
-    rooms.enqueueCmd(restoredCartId, 'start_tracking', [])
+    // Préserver auto_tracking si le chariot y était déjà, sinon paired
+    const currentStatus = rooms._cartStatus.get(restoredCartId)
+    if (currentStatus !== 'auto_tracking') {
+      rooms.setCartStatus(restoredCartId, 'paired')
+    }
+    // Informer l'utilisateur du status courant (pour que le bouton s'affiche correctement)
+    rooms.toUser(restoredCartId, 'cart_status_update', {
+      status: rooms._cartStatus.get(restoredCartId) ?? 'paired',
+    })
   }
 
   // --- Watch cart (pré-session — CartUnlockView) ---
@@ -121,7 +128,6 @@ function registerUserEvents(io, socket, rooms) {
       _activeSocketIds.set(userId, socket.id)
 
       rooms.setCartStatus(cartId, 'paired')
-      rooms.enqueueCmd(cartId, 'start_tracking', [])
 
       callback({ ok: true, cartId })
     } catch (err) {
@@ -218,7 +224,6 @@ async function confirmPairing(cartId) {
   _activeSocketIds.set(userId, userSocket.id)
 
   _rooms.setCartStatus(cartId, 'paired')
-  _rooms.enqueueCmd(cartId, 'start_tracking', [])
 
   userSocket.emit('pairing_confirmed', { cartId, sessionStartTime: Date.now() })
 }
