@@ -2,6 +2,7 @@
 // server/events/user.js
 
 const { getCartState, setCartOwner, clearCartOwner } = require('../db')
+const pythonProxy = require('../python-proxy')
 
 let _rooms = null
 let _io = null
@@ -128,6 +129,7 @@ function registerUserEvents(io, socket, rooms) {
       _activeSocketIds.set(userId, socket.id)
 
       rooms.setCartStatus(cartId, 'paired')
+      pythonProxy.sendCommand({ cmd: 'reset' })
 
       callback({ ok: true, cartId })
     } catch (err) {
@@ -160,6 +162,7 @@ function registerUserEvents(io, socket, rooms) {
 
     rooms.setCartStatus(cartId, 'available')
     rooms.enqueueCmd(cartId, 'stop_tracking', [])
+    pythonProxy.sendCommand({ cmd: 'reset' })
 
     callback({ ok: true })
   })
@@ -180,6 +183,7 @@ function registerUserEvents(io, socket, rooms) {
         await clearCartOwner(cartId)
         rooms.setCartStatus(cartId, 'available')
         rooms.enqueueCmd(cartId, 'stop_tracking', [])
+        pythonProxy.sendCommand({ cmd: 'reset' })
       }, SESSION_TTL_MS)
       _abandonTimers.set(userId, { cartId, timer })
     }
@@ -224,6 +228,7 @@ async function confirmPairing(cartId) {
   _activeSocketIds.set(userId, userSocket.id)
 
   _rooms.setCartStatus(cartId, 'paired')
+  pythonProxy.sendCommand({ cmd: 'reset' })
 
   userSocket.emit('pairing_confirmed', { cartId, sessionStartTime: Date.now() })
 }

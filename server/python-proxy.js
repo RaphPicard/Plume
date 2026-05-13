@@ -21,6 +21,9 @@ function connect() {
 
   pythonWs.on('open', () => {
     console.log('[python-proxy] Connecté au serveur Python')
+    // Reset le tracking au démarrage / à la reconnexion
+    pythonWs.send(JSON.stringify({ cmd: 'reset' }))
+    console.log('[python-proxy] Commande reset envoyée au démarrage')
   })
 
   pythonWs.on('message', (data) => {
@@ -44,4 +47,20 @@ function connect() {
   })
 }
 
-module.exports = { init }
+// Envoie une commande JSON au serveur Python via le WebSocket
+function sendCommand(cmd) {
+  if (!pythonWs || pythonWs.readyState !== WebSocket.OPEN) {
+    console.warn('[python-proxy] WS non connecté, commande ignorée:', cmd)
+    return false
+  }
+  try {
+    pythonWs.send(JSON.stringify(cmd))
+    console.log('[python-proxy] Commande envoyée:', cmd)
+    return true
+  } catch (e) {
+    console.error('[python-proxy] Erreur envoi commande:', e.message)
+    return false
+  }
+}
+
+module.exports = { init, sendCommand }

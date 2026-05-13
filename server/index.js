@@ -179,5 +179,11 @@ io.on('connection', (socket) => { //a ce stade, le client est déjà authentifi�
 app.get('/', (_req, res) => { //_req car on s'en fiche de la requête HTTP, on veut juste tester que le serveur répond
   res.send('Hello World from Express! Tout se passe sur le frontend pour l utilisateur (http://localhost:5173) et sur les WebSockets)');
 });
+// Réinitialiser tous les chariots à 'available' au démarrage du serveur
+const { clearAllCartOwners } = require('./db');
+clearAllCartOwners()
+  .then(count => console.log(`[startup] ${count} chariot(s) remis en mode available`))
+  .catch(err => console.error('[startup] Erreur clearAllCartOwners:', err.message))
+
 // Démarrer sur le port 3000
   httpServer.listen(3000, '0.0.0.0', () => console.log('Server on :3000 (0.0.0.0)'));  // accessible depuis le réseau local

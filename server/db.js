@@ -72,6 +72,16 @@ async function clearCartOwner(cartId) {
   await redis.set(`cart:${cartId}`, JSON.stringify({ ownerId: null, status: 'available' }))
 }
 
+// ---- Réinitialiser tous les chariots à available (appelé au démarrage du serveur) ----
+async function clearAllCartOwners() {
+  const keys = await redis.keys('cart:*')
+  if (keys.length === 0) return 0
+  await Promise.all(
+    keys.map(key => redis.set(key, JSON.stringify({ ownerId: null, status: 'available' })))
+  )
+  return keys.length
+}
+
 // ---- Liste complète (pour le dashboard admin) ----
 // Les IDs officiels viennent de PostgreSQL ; l'état courant vient de Redis.
 async function getAllCarts() {
@@ -101,4 +111,4 @@ async function getUserByUsername(username) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-module.exports = { getCartState, setCartOwner, clearCartOwner, getAllCarts, getUserByUsername }
+module.exports = { getCartState, setCartOwner, clearCartOwner, clearAllCartOwners, getAllCarts, getUserByUsername }

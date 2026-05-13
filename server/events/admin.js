@@ -2,6 +2,7 @@
 // server/events/admin.js
 
 const { getAllCarts, clearCartOwner } = require('../db');
+const pythonProxy = require('../python-proxy');
 
 function registerAdminEvents(io, socket, rooms) {
   rooms.registerAdmin(socket);
@@ -43,6 +44,7 @@ function registerAdminEvents(io, socket, rooms) {
 
     rooms.setCartStatus(cartId, 'available');
     rooms.enqueueCmd(cartId, 'stop_tracking', []);
+    pythonProxy.sendCommand({ cmd: 'reset' });
   });
 }
 
