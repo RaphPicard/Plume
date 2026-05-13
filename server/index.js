@@ -138,7 +138,7 @@ const io = new Server(httpServer, {
 
 const rooms = new RoomManager(io);
 initUserEvents(io, rooms);
-initTrackingWs(httpServer, rooms); // initialisation du serveur de suivi des chariots (tracking-ws.js) qui utilise aussi Socket.IO mais sur un namespace différent (/tracking) pour ne pas mélanger les événements de contrôle et de suivi
+initTrackingWs(rooms); // initialiser le module de suivi automatique des chariots via WebSocket (serveur caméra) — ce module se connecte au serveur caméra (Python/RPi) pour recevoir les données de suivi (distance, angle, etc.) et injecter les commandes de mouvement dans la file batch du chariot C-042 via rooms.enqueueCmd()
 
 // Proxy WebSocket vers le serveur Python (relaie les messages /command via Socket.IO)
 const pythonProxy = require('./python-proxy');

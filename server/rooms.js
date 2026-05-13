@@ -167,8 +167,7 @@ class RoomManager {
 
   // ── Flush ───────────────────────────────────────────────────────────────────
 
-  // Appelé toutes les FLUSH_INTERVAL_MS : envoie le batch JSON à chaque chariot connecté
-  // appelé dans 
+  // Appelé toutes les FLUSH_INTERVAL_MS (0,25s) : envoie le batch JSON à chaque chariot connecté
   _flushAll() {
     for (const cartId of this._cartSockets.keys()) {
       const cmds   = this._cmdQueues.get(cartId)   ?? []

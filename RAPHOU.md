@@ -495,7 +495,7 @@ npm start
 
 Le serveur caméra (Python/RPi) se connecte à notre backend via WebSocket brut (`ws`, pas Socket.IO) :
 ```
-ws://<backend>:3000/data?cartId=C-001&secret=<CAMERA_SECRET>
+ws://<backend_ip>:3000/data?cartId=C-042&secret=<CAMERA_SECRET>
 ```
 Le secret est défini dans `.env` sous `CAMERA_SECRET`.
 
