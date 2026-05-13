@@ -491,59 +491,142 @@ npm start
 # ✅ FAIT — Gestion du suivi autonome
 ## Gestion du suivi autonome
 
-**Implémenté dans `server/tracking-ws.js` (monté dans `server/index.js`).**
+**Fichiers concernés :** `server/tracking-ws.js`, `server/rooms.js`, `server/events/user.js`, `raspberry/cart_client.js`
 
-Le serveur caméra (Python/RPi) se connecte à notre backend via WebSocket brut (`ws`, pas Socket.IO) :
-```
-ws://<backend_ip>:3000/data?cartId=C-042&secret=<CAMERA_SECRET>
-```
-Le secret est défini dans `.env` sous `CAMERA_SECRET`.
+---
 
-Format des données reçues :
+### Flux complet
+
+```
+[Serveur caméra Python — port 8001]
+     │  WebSocket brut (ws, pas Socket.IO)
+     │  ws://<CAMERA_WS_URL>/data  (défini dans .env)
+     ▼
+[server/index.js]
+     │  initTrackingWs(rooms)  ← appelé au démarrage
+     ▼
+[server/tracking-ws.js]  ← client WS, se connecte à la caméra
+     │  reçoit frames JSON à ~30 fps
+     │  vérifie : chariot en ligne ? statut === 'auto_tracking' ?
+     │  calcule speed + direction via computeCmd()
+     │  rooms.enqueueCmd(CART_ID, 'move', [...])
+     ▼
+[server/rooms.js — flush toutes les 250 ms]
+     │  event 'cmd' (batch Socket.IO)
+     ▼
+[raspberry/cart_client.js]
+     │  écoute l'event 'cmd'
+     │  case 'move' : if (tracking) move(direction, speed, diff)
+     ▼
+[Moteurs GPIO]
+```
+
+---
+
+### Activation du mode auto-tracking
+
+1. L'utilisateur émet `start_auto_tracking` depuis l'app
+2. `server/events/user.js` passe le statut du chariot à `'auto_tracking'` (via `rooms.setCartStatus`) et envoie la commande `start_tracking` au chariot
+3. `cart_client.js` reçoit `start_tracking` → met `tracking = true`
+4. À partir de là, `tracking-ws.js` est autorisé à injecter des commandes `move`
+
+Le mode s'arrête via `stop_auto_tracking` (utilisateur), `admin:force_stop` (admin), libération du chariot, ou batterie ≤ 5 % (RPi lui-même).
+
+---
+
+### Connexion au serveur caméra (`tracking-ws.js`)
+
+Notre serveur est **client** WebSocket : il se connecte à `ws://<CAMERA_WS_URL>/data` (port 8001, piloté par le Raspberry caméra).  
+Variable d'environnement : `CAMERA_WS_URL` dans `.env` (ex : `ws://192.168.1.42:8001`).  
+Reconnexion automatique toutes les 3 s en cas de déconnexion.
+
+---
+
+### Format des données reçues (caméra → serveur)
+
 ```json
 {
   "mode": "idle" | "registering" | "tracking",
   "persons": [
-    {
-      "is_target": false,
-      "distance": 3.2,
-      "angle": -12,
-      "conf": 0.87,
-      "similarity": 0.74
-    }
+    { "is_target": true, "distance": 2.1, "angle": -8, "conf": 0.91, "similarity": 0.78 }
   ]
 }
 ```
 
-### Logique de suivi
-Les commandes sont émises **directement** (hors file de flush) vers le chariot via l'event Socket.IO `tracking_cmd` :
-```json
-{ "speed": 0.0–1.0, "angular": -1.0–1.0, "mode": "tracking" }
-```
+---
+
+### Logique de calcul (`computeCmd`)
+
+Paramètres :
+
+| Constante | Valeur | Rôle |
+|---|---|---|
+| `TARGET_DIST` | 1.5 m | Distance idéale — vitesse 0 |
+| `MIN_DIST` | 0.8 m | Arrêt de sécurité |
+| `MAX_DIST` | 3.5 m | Vitesse maximale |
+| `MIN_CONF` | 0.85 | Seuil de confiance minimal |
+| `ANGLE_DEAD_ZONE` | 2° | Zone morte rotation |
+| `MAX_ANGLE` | 30° | Angle = rotation à fond |
+| `MAX_SPEED` | 50 | Valeur max envoyée au RPi |
 
 | Condition | Comportement |
 |---|---|
-| `mode !== "tracking"` | Arrêt (`speed=0, angular=0`) |
-| Aucune personne avec `is_target: true` | Arrêt |
-| `conf < 0.5` | Détection ignorée |
+| Statut chariot ≠ `auto_tracking` | Ignoré (guard côté serveur) |
+| `mode !== "tracking"` | Arrêt |
+| Aucune personne `is_target: true` | Arrêt |
+| `conf < 0.85` | Détection ignorée |
 | `distance < 0.8 m` | Arrêt de sécurité |
-| `0.8 m < distance < 1.5 m` | Vitesse 0 (distance idéale atteinte) |
-| `1.5 m < distance < 3.5 m` | Vitesse proportionnelle à la distance |
-| `distance > 3.5 m` | Vitesse maximale (1.0) |
-| `\|angle\| > 8°` | Rotation proportionnelle (`-angle / 45`, clampé à [-1, 1]) |
-| `\|angle\| ≤ 8°` | Pas de rotation (zone morte) |
+| `0.8 m ≤ distance ≤ 1.5 m` | `speed = 0` (distance idéale) |
+| `1.5 m < distance < 3.5 m` | `speed` proportionnel, scalé sur 0–50 |
+| `distance ≥ 3.5 m` | `speed = 50` (maximum) |
+| `\|angle\| ≤ 2°` | Pas de rotation (zone morte) |
+| `\|angle\| > 2°` | Rotation proportionnelle (`-angle / 30`, clampé à [-1, 1]) |
 
-> `angle` négatif = cible à gauche → `angular` positif (tourne à gauche).
+> `angle` positif = cible à droite → direction `'right'`. `angle` négatif = cible à gauche → `'left'`.
 
-### Côté chariot (RPi) — à implémenter
-Écouter l'event `tracking_cmd` :
-```js
-socket.on('tracking_cmd', ({ speed, angular, mode }) => {
-  // Piloter les moteurs avec speed et angular
-})
+---
+
+### Commandes injectées dans le batch `cmd`
+
+```json
+{ "id": "cmd-<uuid>", "action": "move", "args": ["forward", 32] }
+{ "id": "cmd-<uuid>", "action": "move", "args": ["left", 20, 15] }
+{ "id": "cmd-<uuid>", "action": "move", "args": ["stop"] }
 ```
 
+`args` : `[direction, speed?, diff?]`
+- `direction` : `'forward'` | `'left'` | `'right'` | `'stop'`
+- `speed` : 0–50
+- `diff` : différentiel moteur pour la rotation (0–50)
+
+Flush toutes les 250 ms (`CART_FLUSH_MS=250` dans `.env`).
+
+---
+
+### Côté chariot (`cart_client.js`)
+
+```js
+case 'move': {
+  const [direction, speed, diff] = command.args
+  if (direction === 'stop') { stopMotors(); break }
+  if (tracking) move(direction, speed, diff)
+  break
+}
+```
+
+```js
+function move(direction, speed = 0, diff = 0) {
+  // 'forward'  : les deux moteurs à speed
+  // 'left'     : moteur droit à speed, moteur gauche à (speed - diff)
+  // 'right'    : moteur gauche à speed, moteur droit à (speed - diff)
+}
+```
+
+Les commandes manuelles admin (`'forward'`, `'backward'`, etc. sans speed) restent compatibles grâce aux valeurs par défaut.
+
+---
+
 ### Monitoring admins
-Deux nouveaux events émis vers tous les admins :
-- `tracking_status` → `{ cartId, online: bool }` — connexion/déconnexion du serveur caméra
-- `tracking_update` → `{ cartId, mode, persons }` — données brutes à chaque frame
+
+- `tracking_status` → `{ cartId, online: bool }` — connexion/déconnexion au serveur caméra
+- `tracking_update` → `{ cartId, mode, persons }` — données brutes à chaque frame reçue

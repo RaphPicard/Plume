@@ -84,6 +84,10 @@ class RoomManager {
     return this._cartSockets.has(cartId)
   }
 
+  getCartStatus(cartId) {
+    return this._cartStatus.get(cartId) ?? 'available'
+  }
+
   // ── Utilisateurs ─────────────────────────────────────────────────────────────
 
   assignUser(socket, cartId, userId) {

@@ -92,6 +92,7 @@ function initTrackingWs(rooms) {
       rooms.toAdmins('tracking_update', { cartId: CART_ID, mode, persons })
 
       if (!rooms.isCartOnline(CART_ID)) return
+      if (rooms.getCartStatus(CART_ID) !== 'auto_tracking') return
 
       if (mode !== 'tracking') {
         enqueueMove(rooms, 0, 0)

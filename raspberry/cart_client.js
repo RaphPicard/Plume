@@ -101,9 +101,12 @@ async function main() {
           stopMotors()
           break
 
-        case 'move':
-          if (tracking) move(command.args[0]) // ex: 'forward', 'backward', 'left', 'right'
+        case 'move': {
+          const [direction, speed, diff] = command.args
+          if (direction === 'stop') { stopMotors(); break }
+          if (tracking) move(direction, speed, diff)
           break
+        }
 
         case 'return_to_base':
           tracking = false
@@ -170,11 +173,13 @@ async function main() {
 // ── 3. Contrôle des moteurs (stubs GPIO) ─────────────────────────────────────
 // Remplacer ces fonctions par les appels GPIO réels (onoff, pigpio, etc.)
 
-function move(direction) {
-  console.log(`→ Déplacement : ${direction}`)
-  // Ex avec pigpio :
-  //   motorLeft.write(direction === 'forward' || direction === 'right' ? 1 : 0)
-  //   motorRight.write(direction === 'forward' || direction === 'left'  ? 1 : 0)
+function move(direction, speed = 0, diff = 0) {
+  console.log(`→ Déplacement : ${direction}, vitesse=${speed}, diff=${diff}`)
+  // GPIO (à brancher) :
+  //   'forward'  : les deux moteurs à speed
+  //   'backward' : les deux moteurs en arrière à speed
+  //   'left'     : moteur droit à speed, moteur gauche à (speed - diff)
+  //   'right'    : moteur gauche à speed, moteur droit à (speed - diff)
 }
 
 function stopMotors() {
