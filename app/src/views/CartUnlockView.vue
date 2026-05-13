@@ -78,6 +78,7 @@ import {
   onCartAvailability, onPairingConfirmed, onPairingTimeout,
 } from '../api/socket'
 import { getScanSession, saveScanSession } from '../api/scanAuth'
+import { SERVER_URL } from '../api/config'
 
 const route  = useRoute()
 const router = useRouter()
@@ -143,7 +144,7 @@ async function ensureSession() {
     await connectSocket(existing.token)
     return
   }
-  const res = await fetch('http://localhost:3000/session', { method: 'POST' })
+  const res = await fetch(`${SERVER_URL}/session`, { method: 'POST' })
   if (!res.ok) throw new Error('Impossible de créer la session')
   const { token } = await res.json()
   saveScanSession(token)
@@ -187,7 +188,7 @@ function handleCancelPairing() {
 
 async function simulateConfirm() {
   try {
-    const res = await fetch(`http://localhost:3000/simulate/cart-confirm/${cartId}`, { method: 'POST' })
+    const res = await fetch(`${SERVER_URL}/simulate/cart-confirm/${cartId}`, { method: 'POST' })
     const data = await res.json()
     if (!data.ok) error.value = data.error
   } catch (e) {

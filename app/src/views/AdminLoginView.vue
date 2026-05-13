@@ -22,6 +22,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { connectSocket } from '../api/socket'
+import { SERVER_URL } from '../api/config'
 import { clearAdminSession, getAdminSession, saveAdminSession } from '../api/adminAuth'
 
 const router = useRouter()
@@ -47,7 +48,7 @@ async function handleLogin() {
   error.value = ''
 
   try {
-    const res = await fetch('http://localhost:3000/login', {
+    const res = await fetch(`${SERVER_URL}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

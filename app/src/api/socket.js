@@ -2,8 +2,7 @@
 // Ce module gère la connexion WebSocket avec le serveur via Socket.IO
 // Centralise les events et fonctions métiers simples
 import { io } from 'socket.io-client'
-
-const SERVER_URL = 'http://localhost:3000'
+import { SERVER_URL } from './config'
 
 // Le socket est créé UNE seule fois (singleton)
 // on le crée sans se connecter automatiquement
@@ -230,4 +229,10 @@ export function onAutoTrackingStopped(callback) {
 export function onCartStatusUpdateEvent(callback) {
   socket.on('cart_status_update', callback)
   return () => socket.off('cart_status_update', callback)
+}
+
+// Relais Python via Socket.IO (proxy WS dans server/python-proxy.js)
+export function onCommandStatus(callback) {
+  socket.on('command_status', callback)
+  return () => socket.off('command_status', callback)
 }

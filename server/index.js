@@ -17,8 +17,12 @@ const app = express()
 // (5174, 5175...) — on accepte n'importe quel localhost pour éviter les erreurs CORS.
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin || /^http:\/\/localhost(:\d+)?$/.test(origin)) cb(null, true)
-    else cb(new Error('CORS: origine non autorisée'))
+    if (!origin) return cb(null, true)
+    // localhost
+    if (/^http:\/\/localhost(:\d+)?$/.test(origin)) return cb(null, true)
+    // n'importe quelle IPv4 (LAN, Tailscale, etc.) — OK en dev
+    if (/^http:\/\/(\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(origin)) return cb(null, true)
+    cb(new Error('CORS: origine non autorisée'))
   }
 }))
 app.use(express.json())
@@ -135,6 +139,10 @@ const io = new Server(httpServer, {
 const rooms = new RoomManager(io);
 initUserEvents(io, rooms);
 initTrackingWs(httpServer, rooms); // initialisation du serveur de suivi des chariots (tracking-ws.js) qui utilise aussi Socket.IO mais sur un namespace différent (/tracking) pour ne pas mélanger les événements de contrôle et de suivi
+
+// Proxy WebSocket vers le serveur Python (relaie les messages /command via Socket.IO)
+const pythonProxy = require('./python-proxy');
+pythonProxy.init(io);
 
 
 

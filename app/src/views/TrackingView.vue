@@ -68,7 +68,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCartStore } from '../store/cart'
-import { stopCart, startAutoTracking, onAutoTrackingStarted, onAutoTrackingStopped, onCartStatusUpdateEvent } from '../api/socket'
+import { stopCart, startAutoTracking, onAutoTrackingStarted, onAutoTrackingStopped, onCartStatusUpdateEvent, onCommandStatus } from '../api/socket'
 
 const router = useRouter()
 const store  = useCartStore()
@@ -106,17 +106,15 @@ onMounted(() => {
   })
 })
 
-let commandWs = null
+let unsubCommandStatus = null
 
 function cleanupRegistration() {
   if (registerTimer) {
     clearInterval(registerTimer)
     registerTimer = null
   }
-  if (commandWs) {
-    commandWs.close()
-    commandWs = null
-  }
+  unsubCommandStatus?.()
+  unsubCommandStatus = null
 }
 
 async function registerPerson() {
@@ -124,19 +122,9 @@ async function registerPerson() {
   registering.value = true
   registerCountdown.value = 10
 
-  // 1. Ouvrir le WebSocket /command pour écouter le statut
-  commandWs = new WebSocket('ws://100.81.175.3:8001/command')
-
-  commandWs.addEventListener('message', (event) => {
-    let msg
-    try {
-      msg = JSON.parse(event.data)
-    } catch (e) {
-      console.error('[WS /command] JSON parse error:', e)
-      return
-    }
-    console.log('[WS /command]', msg)
-
+  // 1. Écouter les events du serveur Python relayés par le Node.js
+  unsubCommandStatus = onCommandStatus((msg) => {
+    console.log('[command_status]', msg)
     if (msg.status === 'register_ok') {
       cleanupRegistration()
       registering.value = false
@@ -144,27 +132,23 @@ async function registerPerson() {
       store.updateStatus({ ...store.cartStatus, status: 'auto_tracking' })
       startAutoTracking().catch(e => console.error('Auto-tracking error:', e))
     } else if (msg.status === 'register_failed') {
-      console.error('[WS /command] register_failed:', msg.reason)
+      console.error('[command_status] register_failed:', msg.reason)
       cleanupRegistration()
       registering.value = false
       registerCountdown.value = 10
     }
   })
 
-  commandWs.addEventListener('error', (err) => console.error('[WS /command] error:', err))
-
-  // 2. Envoyer le POST une fois le WS ouvert
-  commandWs.addEventListener('open', async () => {
-    try {
-      await fetch('http://100.81.175.3:8001/command/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ duration: 10 }),
-      })
-    } catch (e) {
-      console.error('POST register error:', e)
-    }
-  })
+  // 2. Envoyer le POST au serveur Python pour lancer l'enregistrement
+  try {
+    await fetch('http://100.81.175.3:8001/command/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ duration: 10 }),
+    })
+  } catch (e) {
+    console.error('POST register error:', e)
+  }
 
   // 3. Lancer l'animation de countdown (purement visuel)
   let elapsed = 0

@@ -1,0 +1,47 @@
+// server/python-proxy.js
+// Proxy WebSocket : se connecte au serveur Python (100.81.175.3:8001/command)
+// et relaie tous les messages aux clients via Socket.IO.
+
+const WebSocket = require('ws')
+
+const PYTHON_WS_URL = 'ws://100.81.175.3:8001/command'
+const RECONNECT_DELAY_MS = 3000
+
+let pythonWs = null
+let _io = null
+
+function init(io) {
+  _io = io
+  connect()
+}
+
+function connect() {
+  console.log('[python-proxy] Connexion à', PYTHON_WS_URL)
+  pythonWs = new WebSocket(PYTHON_WS_URL)
+
+  pythonWs.on('open', () => {
+    console.log('[python-proxy] Connecté au serveur Python')
+  })
+
+  pythonWs.on('message', (data) => {
+    try {
+      const msg = JSON.parse(data.toString())
+      console.log('[python-proxy] Message:', msg)
+      // Broadcast à tous les clients connectés
+      if (_io) _io.emit('command_status', msg)
+    } catch (e) {
+      console.error('[python-proxy] Parse error:', e.message)
+    }
+  })
+
+  pythonWs.on('close', () => {
+    console.log(`[python-proxy] Déconnecté. Reconnexion dans ${RECONNECT_DELAY_MS}ms`)
+    setTimeout(connect, RECONNECT_DELAY_MS)
+  })
+
+  pythonWs.on('error', (err) => {
+    console.error('[python-proxy] Erreur:', err.message)
+  })
+}
+
+module.exports = { init }

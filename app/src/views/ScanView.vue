@@ -62,6 +62,7 @@ import { useRouter } from 'vue-router'
 import { useCartStore } from '../store/cart'
 import { connectSocket } from '../api/socket'
 import { getScanSession, saveScanSession } from '../api/scanAuth'
+import { SERVER_URL } from '../api/config'
 
 const router = useRouter()  //le routeur va permettre de naviguer vers la vue de suivi (TrackingView) après le déverrouillage du chariot
 const store  = useCartStore() //appel cart.js pour partager les données du chariot entre les vues ScanView et TrackingView
@@ -252,7 +253,7 @@ async function ensureScanSession() {
 
 
   try {
-    const res = await fetch('http://localhost:3000/session', { method: 'POST' })
+    const res = await fetch(`${SERVER_URL}/session`, { method: 'POST' })
 
     if (!res.ok) throw new Error('Impossible de créer la session de scan')
 
