@@ -107,16 +107,6 @@ Connexion : Host `postgres`, Port `5432`, Username `postgres`, Password vide.
 
 
 
-
-
-
-
-
-
-
-
-
-
 ---
 
 ## Lancement courant
