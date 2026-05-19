@@ -75,7 +75,7 @@ import { useRouter } from 'vue-router'
 import { useCartStore } from '../store/cart'
 import { connectSocket, stopCart, onCartStatus, onAlert, onKicked, startAutoTracking, onAutoTrackingStarted, onAutoTrackingStopped, onCartStatusUpdateEvent, onCommandStatus } from '../api/socket'
 import { getScanSession, saveScanSession } from '../api/scanAuth'
-import { SERVER_URL } from '../api/config'
+import { SERVER_URL, VIDEO_URL } from '../api/config'
 
 const router = useRouter()
 const store  = useCartStore()
@@ -153,7 +153,7 @@ async function registerPerson() {
 
   // 2. Envoyer le POST au serveur Python pour lancer l'enregistrement
   try {
-    await fetch('http://100.81.175.3:8001/command/register', {
+    await fetch(`${VIDEO_URL}/command/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ duration: 10 }),

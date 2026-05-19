@@ -9,7 +9,12 @@ function registerAdminEvents(io, socket, rooms) {
 
   // --- Commande de déplacement manuel ---
   socket.on('admin:move', ({ cartId, direction }) => {
-    rooms.enqueueCmd(cartId, 'move', [direction]);
+    if (direction === 'stop') {
+      // Le bouton stop du directional pad envoie la même commande que "Arrêt forcé"
+      rooms.enqueueCmd(cartId, 'stop', []);
+    } else {
+      rooms.enqueueCmd(cartId, 'move', [direction]);
+    }
   });
 
   // --- Arrêt forcé ---

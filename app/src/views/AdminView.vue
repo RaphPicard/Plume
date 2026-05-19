@@ -131,6 +131,7 @@ import {
 } from '../api/socket'
 import { clearAdminSelectedCart } from '../api/adminCartSelection'
 import { clearAdminSession } from '../api/adminAuth'
+import { STREAM_URLS } from '../api/config'
 
 const store = useCartStore()
 const router = useRouter()
@@ -142,11 +143,6 @@ const cartId = computed(() => String(route.params.cartId ?? ''))
 const selectedCart = computed(() => store.fleet.find(cart => cart.cartId === cartId.value) ?? null)
 const selectedSensorData = computed(() => store.sensorData[cartId.value])
 const selectedPosition = computed(() => store.positions[cartId.value])
-
-const STREAM_URLS = {
-  raw: 'http://100.81.175.3:5500/stream/raw',
-  annotated: 'http://100.81.175.3:5500/stream/annotated',
-}
 
 const currentStreamUrl = computed(() => STREAM_URLS[selectedStream.value])
 

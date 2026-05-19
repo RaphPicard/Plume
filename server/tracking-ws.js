@@ -14,65 +14,114 @@ const CART_ID         = 'C-042'
 const RECONNECT_MS    = 3000   // délai avant reconnexion automatique
 
 // ── Paramètres de suivi ────────────────────────────────────────────────────────
-// Zones de vitesse selon la distance à la cible :
-//   < STOP_DIST              → vitesse nulle (arrêt de sécurité)
-//   STOP_DIST → RAMP_START   → vitesse nulle (zone tampon)
-//   RAMP_START → RAMP_END    → vitesse linéaire (0 → MAX_SPEED)
-//   > RAMP_END               → vitesse max
-const STOP_DIST       = 0.5  // m — en-dessous: arrêt complet
-const RAMP_START_DIST = 1.0  // m — à partir d'ici la vitesse commence à monter
-const RAMP_END_DIST   = 2.0  // m — au-delà: vitesse max
-const ANGLE_DEAD_ZONE = 2    // ° — zone morte : pas de rotation en-dessous de ce seuil
-const MIN_CONF        = 0.85  // seuil de confiance minimal pour agir sur une détection
-const MAX_ANGLE       = 30   // ° — angle max pour la rotation (au-delà, on tourne à fond)
+// Vitesse linéaire selon la distance :
+//   < FORWARD_MIN_DIST → vitesse 0 (arrêt + zone tampon)
+//   >= FORWARD_MIN_DIST → vitesse MAX_SPEED (toujours plein gaz quand on avance)
+const FORWARD_MIN_DIST = 1.0  // m — en-dessous: arrêt
+const ANGLE_DEAD_ZONE  = 15   // ° — zone morte : en dessous on considère que la cible est en face
+const MIN_CONF         = 0.75 // seuil de confiance minimal pour agir sur une détection
+const MAX_ANGLE        = 35   // ° — angle max pour la rotation (au-delà, on tourne à fond)
 
-const MAX_SPEED      = 50  // valeur max envoyée au chariot (0–50)
-const ROTATION_SPEED = 30  // vitesse de rotation sur place quand la cible est trop proche
+const MAX_SPEED             = 50   // valeur max envoyée au chariot (0–50)
+const TURN_SPEED_STATIONARY = 18   // vitesse de rotation sur place (cible proche, zone tampon)
+const MIN_TURN_DIFF         = 6    // diff minimal pour garantir une rotation visible
 
-// Calcule la vitesse linéaire selon la distance à la cible.
+// Vitesse de rotation en mouvement, plus douce quand la cible est loin
+const TURN_SPEED_NEAR  = 25   // vitesse de rotation quand la cible est proche (~1m)
+const TURN_SPEED_FAR   = 10   // vitesse de rotation quand la cible est loin (≥3m)
+const TURN_DIST_NEAR   = 1.0  // m — distance à laquelle la rotation est max
+const TURN_DIST_FAR    = 3.0  // m — distance à laquelle la rotation est min
+
+// Vitesse linéaire : 0 si trop proche, MAX_SPEED sinon (toujours plein gaz)
 function computeSpeed(distance) {
-  if (distance < RAMP_START_DIST) return 0
-  if (distance >= RAMP_END_DIST) return MAX_SPEED
-  const ratio = (distance - RAMP_START_DIST) / (RAMP_END_DIST - RAMP_START_DIST)
-  return Math.round(ratio * MAX_SPEED)
+  if (distance < FORWARD_MIN_DIST) return 0
+  return MAX_SPEED
+}
+
+// Vitesse de rotation en mouvement : plus douce quand la cible est loin
+function computeTurnSpeed(distance) {
+  if (distance <= TURN_DIST_NEAR) return TURN_SPEED_NEAR
+  if (distance >= TURN_DIST_FAR)  return TURN_SPEED_FAR
+  const ratio = (distance - TURN_DIST_NEAR) / (TURN_DIST_FAR - TURN_DIST_NEAR)
+  return Math.round(TURN_SPEED_NEAR + (TURN_SPEED_FAR - TURN_SPEED_NEAR) * ratio)
 }
 
 // ── Calcul de la commande de mouvement ────────────────────────────────────────
 function computeCmd(target) {
   const { distance, angle, conf } = target
 
-  if (conf < MIN_CONF) return { speed: 0, angular: 0 }
+  if (conf < MIN_CONF) return { speed: 0, angular: 0, turnSpeed: 0 }
 
   const speed = computeSpeed(distance)
+  const turnSpeed = computeTurnSpeed(distance)
 
   // angle positif = cible à droite → angular négatif → 'right'
   // angle négatif = cible à gauche → angular positif → 'left'
+  // Rotation linéaire entre ANGLE_DEAD_ZONE et MAX_ANGLE → 0 puis monte progressivement à 1
   let angular = 0
   if (Math.abs(angle) > ANGLE_DEAD_ZONE) {
-    angular = Math.max(-1, Math.min(1, -angle / MAX_ANGLE))
+    const adjustedAngle = Math.abs(angle) - ANGLE_DEAD_ZONE
+    const range = MAX_ANGLE - ANGLE_DEAD_ZONE
+    const sign = angle > 0 ? -1 : 1
+    angular = sign * Math.min(1, adjustedAngle / range)
   }
 
-  return { speed, angular }
+  return { speed, angular, turnSpeed }
 }
 
 // ── Injection des commandes directionnelles dans la file batch ────────────────
-// speed : 0–MAX_SPEED (déjà scalé par computeCmd)
-// angular : -1–+1  (positif = gauche, négatif = droite)
-function enqueueMove(rooms, speed, angular) {
+// - Deduplication : on ne re-envoie pas la même commande deux fois de suite
+// - Grace period sur les stops : on attend STOP_GRACE_FRAMES frames sans cible avant
+//   de réellement stopper, pour absorber les pertes de détection ponctuelles.
+// - Refresh périodique : même si la commande n'a pas changé, on la renvoie toutes
+//   les CMD_REFRESH_MS pour garder le robot synchronisé (au cas où une trame se perd).
+const STOP_GRACE_FRAMES = 5
+const CMD_REFRESH_MS    = 1000
+let lastCmdKey = null
+let lastCmdTime = 0
+let stopGraceCounter = 0
+
+function enqueueIfChanged(rooms, action, args, cmdKey) {
+  const now = Date.now()
+  // Skip seulement si la commande est identique ET récente
+  if (cmdKey === lastCmdKey && now - lastCmdTime < CMD_REFRESH_MS) return
+  rooms.enqueueCmd(CART_ID, action, args)
+  lastCmdKey = cmdKey
+  lastCmdTime = now
+}
+
+// speed     : 0–MAX_SPEED (déjà scalé par computeCmd)
+// angular   : -1–+1  (positif = gauche, négatif = droite)
+// turnSpeed : vitesse de rotation à appliquer pendant les virages en mouvement
+function enqueueMove(rooms, speed, angular, turnSpeed = 0) {
   if (speed === 0 && angular === 0) {
-    rooms.enqueueCmd(CART_ID, 'move', ['stop'])
+    stopGraceCounter++
+    if (stopGraceCounter < STOP_GRACE_FRAMES) return  // on attend avant de stopper
+    enqueueIfChanged(rooms, 'stop', [], 'stop')
     return
   }
+
+  stopGraceCounter = 0  // reset dès qu'on bouge
+
   if (angular !== 0) {
     const direction = angular > 0 ? 'left' : 'right'
-    // Si la cible est dans la zone tampon (speed = 0) mais à un angle,
-    // on tourne sur place à ROTATION_SPEED.
-    const effectiveSpeed = speed === 0 ? ROTATION_SPEED : speed
-    const diff = Math.round(Math.abs(angular) * effectiveSpeed)
-    rooms.enqueueCmd(CART_ID, 'move', [direction, effectiveSpeed, diff])
+    // - cible proche (speed = 0) → rotation sur place à TURN_SPEED_STATIONARY
+    // - cible en mouvement      → rotation à turnSpeed (plus doux quand cible loin)
+    const effectiveSpeed = speed === 0
+      ? TURN_SPEED_STATIONARY
+      : turnSpeed
+    const diff = Math.max(MIN_TURN_DIFF, Math.round(Math.abs(angular) * effectiveSpeed))
+    enqueueIfChanged(rooms, 'move', [direction, effectiveSpeed, diff], `move:${direction}:${effectiveSpeed}:${diff}`)
   } else {
-    rooms.enqueueCmd(CART_ID, 'move', ['forward', speed])
+    enqueueIfChanged(rooms, 'move', ['forward', speed], `move:forward:${speed}`)
   }
+}
+
+// Permet de forcer un reset du dedup (quand on quitte auto_tracking par exemple)
+function resetMoveDedup() {
+  lastCmdKey = null
+  lastCmdTime = 0
+  stopGraceCounter = 0
 }
 
 // ── Connexion au serveur caméra avec reconnexion automatique ──────────────────
@@ -104,7 +153,10 @@ function initTrackingWs(rooms) {
       rooms.toAdmins('tracking_update', { cartId: CART_ID, mode, persons })
 
       if (!rooms.isCartOnline(CART_ID)) return
-      if (rooms.getCartStatus(CART_ID) !== 'auto_tracking') return
+      if (rooms.getCartStatus(CART_ID) !== 'auto_tracking') {
+        resetMoveDedup()
+        return
+      }
 
       if (mode !== 'tracking') {
         enqueueMove(rooms, 0, 0)
@@ -118,14 +170,16 @@ function initTrackingWs(rooms) {
       }
 
       const cmd = computeCmd(target)
-      enqueueMove(rooms, cmd.speed, cmd.angular)
+      enqueueMove(rooms, cmd.speed, cmd.angular, cmd.turnSpeed)
     })
 
     ws.on('close', () => {
       console.log('[tracking-ws] Déconnecté du serveur caméra — reconnexion dans', RECONNECT_MS, 'ms')
       rooms.toAdmins('tracking_status', { cartId: CART_ID, online: false })
-      if (rooms.isCartOnline(CART_ID)) {
-        enqueueMove(rooms, 0, 0)
+      // On ne stoppe le robot que s'il était en auto_tracking, sinon on touche pas à ce que l'admin envoie
+      if (rooms.isCartOnline(CART_ID) && rooms.getCartStatus(CART_ID) === 'auto_tracking') {
+        resetMoveDedup()
+        rooms.enqueueCmd(CART_ID, 'stop', [])
       }
       setTimeout(connect, RECONNECT_MS)
     })
