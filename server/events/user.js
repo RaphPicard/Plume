@@ -138,6 +138,8 @@ function registerUserEvents(io, socket, rooms) {
     }
   })
 
+  
+
   // --- Passer en mode auto-tracking ---
   socket.on('start_auto_tracking', async (_, callback) => {
     const cartId = socket.data.activeCartId

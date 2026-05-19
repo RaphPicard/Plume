@@ -111,6 +111,8 @@ function initTrackingWs(rooms) {
         return
       }
 
+      // si mode = "tracking", maj par cart_client.js (ou simulate-cart.js) à la reception de "start_auto_tracking" pour éviter les conflits de commandes
+
       const target = persons.find(p => p.is_target)
       if (!target) {
         enqueueMove(rooms, 0, 0)

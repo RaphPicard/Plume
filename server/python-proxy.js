@@ -1,10 +1,10 @@
 // server/python-proxy.js
-// Proxy WebSocket : se connecte au serveur Python (100.81.175.3:8001/command)
+// Proxy WebSocket : se connecte au serveur Python (100.81.175.3:8002/command)
 // et relaie tous les messages aux clients via Socket.IO.
 
 const WebSocket = require('ws')
 
-const PYTHON_WS_URL = 'ws://100.81.175.3:8001/command'
+const PYTHON_WS_URL = 'ws://100.81.175.3:8002/command' // 8001 --> 8002 pour le serveur Python de la caméra
 const RECONNECT_DELAY_MS = 3000
 
 let pythonWs = null

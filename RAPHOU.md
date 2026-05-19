@@ -20,39 +20,56 @@
 
 #### 1.1 Vue Router — comment on navigue
 
-> "La navigation est entièrement gérée par Vue Router. Il y a 5 routes principales."
+> "La navigation est entièrement gérée par Vue Router. Il y a 7 routes principales."
 
 ```
-/cart/:cartId        → CartUnlockView.vue    (scan QR ou saisie manuelle, pairing)
-/session             → UserSessionView.vue   (données capteurs temps réel, utilisateur)
+/                    → ScanView.vue          (point d'entrée : scan QR + session auto)
+/cart/:cartId        → CartUnlockView.vue    (pairing physique du chariot)
+/tracking            → TrackingView.vue      (suivi temps réel utilisateur + mode auto-tracking)
+/session             → UserSessionView.vue   (données capteurs, vue alternative utilisateur)
 /admin               → AdminLoginView.vue    (login admin, accessible uniquement par URL)
 /admin/select-cart   → AdminCartSelectView.vue (choix du chariot à surveiller)
 /admin/dashboard/:cartId → AdminView.vue    (dashboard flotte complet)
+/admin/dashboard     → redirect dynamique vers le dernier chariot sélectionné (ou /admin/select-cart)
 ```
 
-La navigation est **programmée** depuis le code Vue : après pairing confirmé, `router.push('/session')` ; après login admin, `router.push('/admin/select-cart')`.
+La navigation est **programmée** depuis le code Vue : après pairing confirmé, `router.push('/tracking')` ; après login admin, `router.push('/admin/select-cart')`.
 
 ---
 
-#### 1.2 CartUnlockView — scan QR et pairing physique
+#### 1.2 ScanView — point d'entrée (nouveau)
 
-> "L'utilisateur scanne le QR code collé sur le chariot. Le pairing se fait en deux temps : le serveur attend la confirmation physique du chariot."
+> "La page d'accueil `/` crée automatiquement une session anonyme puis ouvre la caméra pour scanner le QR code."
+
+**Fichier :** `app/src/views/ScanView.vue`
+
+**Session automatique (sans login manuel) :**
+
+```
+POST http://<host>:3000/session
+→ Réponse: { token }
+```
+
+Le token est stocké via `api/scanAuth.js` (localStorage) et réutilisé à chaque retour sur la vue. La connexion WebSocket est établie immédiatement avec ce token.
+
+**Scan QR :**
+- Utilise l'API native `BarcodeDetector` du navigateur (Chrome uniquement ; sinon saisie manuelle)
+- Caméra arrière (`facingMode: 'environment'`) — fonctionne sur mobile
+- Normalise les QR codes qui contiennent une URL complète (extrait le dernier segment de chemin)
+- Anti-doublon : même code ignoré dans la fenêtre de 1,5 s
+- Après détection → `router.push('/cart/:cartId')`
+
+---
+
+#### 1.3 CartUnlockView — pairing physique
+
+> "Après le scan, l'utilisateur attend la confirmation physique du chariot. Il n'y a plus de login manuel ici."
 
 **Fichier :** `app/src/views/CartUnlockView.vue`
 
-**Étape 1 — Login HTTP**
+**Pairing (`request_pairing`) — inchangé**
 
-```
-POST http://localhost:3000/login
-Body: { username, password }
-→ Réponse: { token, role }
-```
-
-Le token JWT est stocké et réutilisé pour la connexion WebSocket.
-
-**Étape 2 — Pairing (`request_pairing`)**
-
-L'utilisateur scanne le QR code (ou saisit l'ID). Le frontend émet :
+L'utilisateur arrive ici depuis `ScanView` avec l'ID dans l'URL. Le frontend émet :
 
 ```js
 socket.emit('request_pairing', { cartId }, callback)
@@ -64,15 +81,39 @@ Le serveur :
 3. Attend la confirmation physique du chariot (bouton sur le robot)
 4. Émet `pairing_confirmed` + `start_tracking` au chariot
 
-→ Si confirmé : `router.push('/session')`
+→ Si confirmé : `router.push('/tracking')`
 
 ---
 
-#### 1.3 UserSessionView — données temps réel utilisateur
+#### 1.4 TrackingView — suivi temps réel utilisateur (nouveau)
+
+> "Une fois pairé, l'utilisateur voit les données capteurs et peut enregistrer la personne à suivre pour activer le mode auto-tracking."
+
+**Fichier :** `app/src/views/TrackingView.vue`
+
+**Bouton "Enregistrer la personne à suivre" :**
+1. Lance un `POST http://100.81.175.3:8002/command/register` avec `{ duration: 10 }` vers le serveur Python
+2. Countdown visuel de 10 s
+3. Écoute `command_status` via Socket.IO :
+   - `register_ok` → émet `start_auto_tracking` au serveur Node + affiche "👁 Personne suivie"
+   - `register_failed` → réinitialise le bouton
+4. Timeout de sécurité à 20 s (si aucune réponse reçue)
+
+**Statuts affichés :**
+- `paired` : prêt, bouton actif
+- `auto_tracking` : chariot en suivi autonome, bouton désactivé avec label "👁 Personne suivie"
+
+**Arrêt du suivi :** bouton "Arrêter" → `stopCart()` → `store.clearActiveCart()` → `router.push('/')`
+
+---
+
+#### 1.5 UserSessionView — vue alternative utilisateur
+
+> "Vue de session alternative (route `/session`), toujours présente mais le flux principal passe maintenant par TrackingView."
 
 > "Une fois pairé, l'utilisateur voit en temps réel le poids, la batterie, la vitesse, et les alertes obstacles."
 
-**Fichier :** `app/src/views/UserSessionView.vue`
+**Fichier :** `app/src/views/UserSessionView.vue` (route `/session`)
 
 **Côté serveur (`events/cart.js`) :**
 
@@ -84,7 +125,7 @@ Le store Pinia (`store/cart.js`) centralise les données et les expose à la vue
 
 ---
 
-#### 1.4 AdminView — tableau de bord flotte
+#### 1.6 AdminView — tableau de bord flotte
 
 > "L'admin voit tous les chariots en temps réel et peut les piloter à distance."
 
@@ -144,7 +185,7 @@ Trois rôles : `user`, `admin`, `cart`. Les chariots ont leur propre route `/car
 | `admins` | Tous les admins connectés | `sensor_update`, `cart_online/offline`, `cart_position` |
 | `carts` | Tous les Raspberry | Broadcast global (non utilisé actuellement) |
 
-Un utilisateur rejoint `user_of:C-001` au moment du `pairing_confirmed`. Il en sort à la libération du chariot ou à la déconnexion.
+Un utilisateur rejoint `user_of:C-001` au moment du `pairing_confirmed`. Il en sort à la libération du chariot ou à la déconnexion (forcée, attentue ou NON).
 
 ---
 
@@ -162,7 +203,7 @@ Libération :     Redis : SET cart:C-001 → { ownerId: null,   status: "availab
 
 ---
 
-#### 2.4 Simulateur de chariot (`simulate-cart.js`)
+#### 2.4 Simulateur de chariot (`simulate-cart.js`) ou (raspberry/cart_client.js`)
 
 > "Un simulateur Node.js joue le rôle du chariot physique pendant les démos."
 
@@ -190,7 +231,43 @@ Les vues Vue n'interagissent **jamais directement** avec Socket.IO.
 
 ---
 
-#### 2.6 Application Desktop Electron
+#### 2.6 Proxy Python (`python-proxy.js`) — nouveau
+
+> "Le serveur Node.js se connecte au serveur Python de vision (Tailscale) et relaie ses messages aux clients via Socket.IO."
+
+**Fichier :** `server/python-proxy.js`
+
+Notre serveur est **client** WebSocket vers `ws://100.81.175.3:8002/command`, le serveur de la caméra...
+- À la connexion, envoie `{ cmd: 'reset' }` pour réinitialiser le tracking
+- Tous les messages reçus du Python sont broadcastés à **tous** les clients Socket.IO : `io.emit('command_status', msg)`
+- Reconnexion automatique toutes les 3 s en cas de déconnexion
+- Expose `sendCommand(cmd)` pour envoyer des commandes au Python depuis d'autres modules
+
+**Messages relayés (`command_status`) :**
+```json
+{ "status": "register_ok" }
+{ "status": "register_failed", "reason": "..." }
+```
+
+---
+
+#### 2.7 SERVER_URL dynamique pour mobile (`config.js`) — nouveau
+
+> "L'URL du serveur s'adapte automatiquement selon le contexte : téléphone, navigateur web ou Electron."
+
+**Fichier :** `app/src/api/config.js`
+
+```js
+// En navigateur web/mobile : http://<même hostname>:3000
+// En Electron (file://)    : http://localhost:3000
+export const SERVER_URL = getServerUrl()
+```
+
+Cela permet d'accéder à l'app depuis un téléphone sur le même réseau Wi-Fi sans changer de config.
+
+---
+
+#### 2.8 Application Desktop Electron
 
 > "L'app Vue tourne comme une vraie application desktop grâce à Electron, sans changer une ligne de code Vue."
 
@@ -220,6 +297,8 @@ plume/
 │   ├── db.js              — accès PostgreSQL + Redis
 │   ├── auth.js            — middleware JWT
 │   ├── rooms.js           — RoomManager + batch flush commandes
+│   ├── tracking-ws.js     — client WS vers serveur caméra Python
+│   ├── python-proxy.js    — proxy WS vers serveur Python vision (commandes register)
 │   ├── schema.sql         — schéma BDD (auto-exécuté par Docker)
 │   ├── seed-users.js      — insertion utilisateurs de test
 │   ├── simulate-cart.js   — simulateur de chariot IoT
@@ -232,12 +311,19 @@ plume/
 │   │   └── main.js        — processus principal Electron
 │   ├── vite.config.js     — Vite + plugin Electron + Vue
 │   └── src/
-│       ├── api/socket.js       — client WebSocket singleton
+│       ├── api/
+│       │   ├── socket.js       — client WebSocket singleton
+│       │   ├── config.js       — SERVER_URL dynamique (web/mobile/Electron)
+│       │   ├── scanAuth.js     — persistance session de scan (localStorage)
+│       │   ├── adminAuth.js    — persistance session admin (localStorage)
+│       │   └── adminCartSelection.js — persistance dernier chariot admin
 │       ├── store/cart.js       — état global Pinia
 │       ├── router/index.js     — routes Vue
 │       └── views/
-│           ├── CartUnlockView.vue      — scan QR + pairing
-│           ├── UserSessionView.vue     — suivi temps réel (utilisateur)
+│           ├── ScanView.vue            — page d'accueil : scan QR + session auto
+│           ├── TrackingView.vue        — suivi temps réel + enregistrement personne
+│           ├── CartUnlockView.vue      — pairing physique du chariot
+│           ├── UserSessionView.vue     — vue alternative suivi utilisateur
 │           ├── AdminLoginView.vue      — login admin
 │           ├── AdminCartSelectView.vue — sélection chariot admin
 │           └── AdminView.vue           — dashboard flotte
@@ -257,12 +343,13 @@ plume/
 ### Fonctionnalités implémentées
 
 **Côté utilisateur**
-- Login HTTP (POST `/login`) → JWT
-- Connexion WebSocket authentifiée
-- Scan QR code du chariot → `CartUnlockView.vue`
-- Pairing physique (`request_pairing` + confirmation bouton robot, timeout 60 s)
-- Données capteurs temps réel : poids, batterie, vitesse
-- Alertes obstacles
+- Session automatique anonyme (POST `/session`) → JWT sans login manuel
+- Scan QR code natif (`BarcodeDetector`) → `ScanView.vue` (point d'entrée `/`)
+- Compatibilité mobile : `SERVER_URL` dynamique via `api/config.js`
+- Pairing physique (`request_pairing` + confirmation bouton robot, timeout 60 s) → `CartUnlockView.vue`
+- Suivi temps réel (poids, batterie, vitesse, alertes obstacles) → `TrackingView.vue`
+- Enregistrement personne à suivre (POST vers Python + countdown 10 s + `command_status`)
+- Mode auto-tracking : activation via `start_auto_tracking`, statut persistant après refresh
 - Libération du chariot
 
 **Côté admin**
@@ -275,9 +362,11 @@ plume/
 **Backend**
 - JWT + contrôle d'accès par rôle (`user`, `admin`, `cart`)
 - Route `/cart-token` : JWT 30 jours pour chariots
+- Route `POST /session` : JWT anonyme pour session de scan
 - PostgreSQL : utilisateurs (bcrypt) + registre chariots
 - Redis : état temps réel (`ownerId`, `status`)
-- RoomManager complet (`rooms.js`) avec batch flush de commandes toutes les 1000 ms
+- RoomManager complet (`rooms.js`) avec batch flush de commandes toutes les 250 ms (`CART_FLUSH_MS`)
+- Proxy Python (`python-proxy.js`) : relaie `command_status` (register_ok/failed) via Socket.IO broadcast
 - Simulateur de chariot pour démos sans hardware
 
 **Raspberry Pi**
@@ -302,34 +391,6 @@ carts  (cart_id)   -- C-001, C-002, C-042
 ```json
 { "ownerId": "userId | null", "status": "available | in_use" }
 ```
-
----
-
-## Ce qu'il me manque comme information
-
-
-### Encore ouvert
-
-- **Que se passe-t-il si un chariot se déconnecte en cours d'usage ?**
-  L'état Redis reste `in_use` indéfiniment. Règle métier à définir : libération automatique après TTL, ou notification admin ?
-
-- **Que se passe-t-il si un utilisateur ne rend pas le chariot ?**
-  Pas de règle métier implémentée. Options : timeout session côté serveur, rappel à la base forcé par admin.
-
----
-
-## Ce qui manque pour que le projet soit fonctionnel
-
-**Gestion de la déconnexion du chariot (priorité haute)**
-
-Si le Raspberry perd le réseau en cours d'usage :
-- Le serveur émet `cart_offline` aux admins ✅
-- Mais l'état Redis reste `in_use` → chariot bloqué indéfiniment
-- Solution : TTL Redis 30 s rafraîchi par chaque `sensor_data` + libération automatique à expiration
-
-**Reconnexion WebSocket frontend**
-
-Le Raspberry gère déjà la reconnexion avec backoff exponentiel. Il reste à gérer côté Vue : après coupure réseau, le store Pinia doit relancer `request_pairing` pour rebinder l'utilisateur à son chariot.
 
 ---
 
@@ -386,6 +447,14 @@ Le Raspberry gère déjà la reconnexion avec backoff exponentiel. Il reste à g
 | `sensor_update` | Serveur → Admin | — | `{ cartId, ...données complètes }` |
 | `cart_online` | Serveur → Admin | — | `{ cartId, timestamp }` |
 | `cart_offline` | Serveur → Admin | — | `{ cartId }` |
+| `command_status` | Serveur → Tous clients | — | `{ status: 'register_ok' \| 'register_failed', reason? }` |
+| `start_auto_tracking` | Frontend → Serveur | `user` | `{}` |
+| `stop_auto_tracking` | Frontend → Serveur | `user` | `{}` |
+| `auto_tracking_started` | Serveur → Frontend | — | `{ cartId }` |
+| `auto_tracking_stopped` | Serveur → Frontend | — | `{ cartId }` |
+| `cart_status_update` | Serveur → Frontend | — | `{ status }` |
+
+---
 
 | Room | Nom réel | Membres | Utilisée pour |
 |---|---|---|---|
@@ -406,7 +475,7 @@ cd raspberry
 npm install
 ```
 
-Éditer `config.js` : renseigner `SERVER_URL` (IP du serveur sur le réseau Wifi local) et `CART_ID` (ex. `C-001`).
+Éditer `config.js` : renseigner `SERVER_URL` (IP du serveur sur le réseau Wifi local) et `CART_ID` (ex. `C-042`).
 
 ```bash
 npm start
@@ -498,7 +567,7 @@ npm start
 ### Flux complet
 
 ```
-[Serveur caméra Python — port 8001]
+[Serveur caméra Python — port 8002]
      │  WebSocket brut (ws, pas Socket.IO)
      │  ws://<CAMERA_WS_URL>/data  (défini dans .env)
      ▼
@@ -536,8 +605,8 @@ Le mode s'arrête via `stop_auto_tracking` (utilisateur), `admin:force_stop` (ad
 
 ### Connexion au serveur caméra (`tracking-ws.js`)
 
-Notre serveur est **client** WebSocket : il se connecte à `ws://<CAMERA_WS_URL>/data` (port 8001, piloté par le Raspberry caméra).  
-Variable d'environnement : `CAMERA_WS_URL` dans `.env` (ex : `ws://192.168.1.42:8001`).  
+Notre serveur est **client** WebSocket : il se connecte à `ws://<CAMERA_WS_URL>/data` (port 8002, piloté par le Raspberry caméra).  
+Variable d'environnement : `CAMERA_WS_URL` dans `.env` (ex : `ws://192.168.1.42:8002`).  
 Reconnexion automatique toutes les 3 s en cas de déconnexion.
 
 ---
@@ -555,7 +624,7 @@ Reconnexion automatique toutes les 3 s en cas de déconnexion.
 
 ---
 
-### Logique de calcul (`computeCmd`)
+### Logique de calcul (`computeCmd`) dans `tracking-ws.js`
 
 Paramètres :
 
