@@ -53,6 +53,7 @@ app.post('/login', async (req, res) => {
     SECRET,
     { expiresIn: '24h' }
   )
+  console.log(`[login] token généré — user="${username}" role="${user.role}" token="${token.slice(0, 20)}..."`)
   res.json({ token, role: user.role })  // récupérer dans le fichier ScanView.vue du frontend pour stocker le token dans le localStorage et l'utiliser pour se connecter au WebSocket (api/socket.js) et pour afficher la bonne interface (ScanView ou AdminView)
 })
 
@@ -68,14 +69,18 @@ app.post('/simulate/cart-confirm/:cartId', async (req, res) => {
   }
 })
 
-// Session automatique pour la vue de scan : pas d'identifiants demandés, on crée un token utilisateur éphémère
-app.post('/session', (_req, res) => {
+// Session automatique pour la vue de scan : pas d'identifiants demandés, on crée un token utilisateur éphémère 
+// car le frontend a besoin d'un token pour se connecter au WebSocket et recevoir les données du chariot (distance, angle, etc.) 
+// même si l'utilisateur n'est pas connecté avec un compte réel. Ce token de session est généré avec un userId de type "guest-..." 
+// et le rôle "user", et il expire au bout de 24h (mais en pratique il sera régénéré à chaque fois que l'utilisateur ouvrira la page de scan).
+app.post('/session', (_req, res) => { // appelé par ensureScanSession dans ScanView.vue pour créer une session temporaire si l'utilisateur n'est pas connecté (pas de token dans localStorage)
+  const guestId = createGuestUserId()
   const token = jwt.sign(
-    { role: 'user', userId: createGuestUserId() },
+    { role: 'user', userId: guestId },
     SECRET,
     { expiresIn: '24h' }
   )
-
+  console.log(`[session] session anonyme créée — userId="${guestId}"`)
   res.json({ token, role: 'user' })
 })
 

@@ -68,7 +68,7 @@ function registerCartEvents(io, socket, rooms) {    // appelé dans server.js lo
     rooms.toAdmins('cart_status_update', {
       cartId,
       status: status,
-      ownerId: rooms._cartOwners.get(cartId) ?? null,
+      ownerId: rooms._cartUsers.get(cartId) ?? null,
     });
 
     // Notifier l'utilisateur en session
@@ -93,7 +93,7 @@ function registerCartEvents(io, socket, rooms) {    // appelé dans server.js lo
     rooms.toAdmins('cart_status_update', {
       cartId,
       status: status,
-      ownerId: rooms._cartOwners.get(cartId) ?? null,
+      ownerId: rooms._cartUsers.get(cartId) ?? null,
     });
 
     // Notifier l'utilisateur en session

@@ -59,6 +59,7 @@ class RoomManager {
     this._alertQueues.set(cartId, [])
     if (!this._cartStatus.has(cartId)) this._cartStatus.set(cartId, 'available')
 
+    console.log(`[cart_online] cartId="${cartId}" → room rejointe, admins notifiés, statut=available`)
     this.io.to(this.allAdminsRoom).emit('cart_online', { cartId, timestamp: Date.now() }) // cart_online est écouté dans le dashboard admin pour afficher les chariots connectés en temps réel
     this.io.to(this.watcherRoom(cartId)).emit('cart_availability', {
       cartId, online: true,
@@ -177,6 +178,9 @@ class RoomManager {
       const cmds   = this._cmdQueues.get(cartId)   ?? []
       const alerts = this._alertQueues.get(cartId) ?? []
 
+      if (cmds.length > 0) {
+        console.log(`[flush] batch → cartId="${cartId}" cmds=${JSON.stringify(cmds.map(c => c.action))}`)
+      }
       // le chariot/ou n'importe quel client abonné à la room cart:cartId doit éouter l'event 'cmd'
       this.io.to(this.cartRoom(cartId)).emit('cmd', {     //envoie des données à la room du chariot (cartId) ; le chariot doit être abonné à cette room pour recevoir les commandes et alertes qui lui sont destinées
         cartId,
