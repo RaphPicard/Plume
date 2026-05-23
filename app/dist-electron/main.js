@@ -3,7 +3,7 @@ import { fileURLToPath } from "url";
 import path from "path";
 //#region electron/main.js
 var __dirname = path.dirname(fileURLToPath(import.meta.url));
-var ENTRY_PATH = process.env.ELECTRON_ENTRY_PATH || "/";
+var ENTRY_PATH = process.env.ELECTRON_ENTRY_PATH || "/admin";
 var IS_ADMIN = ENTRY_PATH.startsWith("/admin");
 function createWindow() {
 	const win = new BrowserWindow({

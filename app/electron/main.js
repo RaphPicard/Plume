@@ -7,9 +7,9 @@ import path from 'path'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-// Route d'entrée : '/' par défaut (vue utilisateur), '/admin' pour la vue admin.
-// Positionnée via variable d'env avant le lancement : ELECTRON_ENTRY_PATH=/admin vite
-const ENTRY_PATH = process.env.ELECTRON_ENTRY_PATH || '/'
+// Route d'entrée : '/admin' par défaut (dashboard admin).
+// Pour lancer la vue utilisateur : ELECTRON_ENTRY_PATH=/ vite
+const ENTRY_PATH = process.env.ELECTRON_ENTRY_PATH || '/admin'
 const IS_ADMIN = ENTRY_PATH.startsWith('/admin')
 
 function createWindow() {
