@@ -13,17 +13,20 @@ function registerAdminEvents(io, socket, rooms) {
       // Le bouton stop du directional pad envoie la même commande que "Arrêt forcé"
       rooms.enqueueCmd(cartId, 'stop', []);
     } else {
+      console.log(`[admin:move] cartId="${cartId}" direction="${direction}" → enqueued`)
       rooms.enqueueCmd(cartId, 'move', [direction]);
     }
   });
 
   // --- Arrêt forcé ---
   socket.on('admin:force_stop', ({ cartId }) => {
+    console.log(`[admin:force_stop] cartId="${cartId}" → enqueued`)
     rooms.enqueueCmd(cartId, 'stop', []);
   });
 
   // --- Rappel à la base ---
   socket.on('admin:recall', ({ cartId }) => {
+    console.log(`[admin:recall] cartId="${cartId}" → enqueued`)
     rooms.enqueueCmd(cartId, 'return_to_base', []);
   });
 

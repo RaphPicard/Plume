@@ -142,7 +142,9 @@ async function registerPerson() {
       registering.value = false
       registerSuccess.value = true
       store.updateStatus({ ...store.cartStatus, status: 'auto_tracking' })
+
       startAutoTracking().catch(e => console.error('Auto-tracking error:', e))
+      
     } else if (msg.status === 'register_failed') {
       console.error('[command_status] register_failed:', msg.reason)
       cleanupRegistration()

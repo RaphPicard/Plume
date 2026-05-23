@@ -145,25 +145,22 @@ function initTrackingWs(rooms) {
     ws.on('message', (raw) => {
       let data
       try { data = JSON.parse(raw) } catch { return }
-      console.log(data)
 
       const { mode, persons = [] } = data
       console.log(`[tracking-ws] mode=${mode} | ${persons.length} personne(s)`)
 
       rooms.toAdmins('tracking_update', { cartId: CART_ID, mode, persons })
 
-      if (!rooms.isCartOnline(CART_ID)) return
-      if (rooms.getCartStatus(CART_ID) !== 'auto_tracking') {
-        resetMoveDedup()
-        return
+      if (!rooms.isCartOnline(CART_ID)) return // guard : ne pas traiter les données si le chariot est hors ligne
+      if (rooms.getCartStatus(CART_ID) !== 'auto_tracking'){ 
+        resetMoveDedup() 
+        return // guard : n'agir que si le mode de contrôle est auto_tracking
       }
 
       if (mode !== 'tracking') {
         enqueueMove(rooms, 0, 0)
         return
       }
-
-      // si mode = "tracking", maj par cart_client.js (ou simulate-cart.js) à la reception de "start_auto_tracking" pour éviter les conflits de commandes
 
       const target = persons.find(p => p.is_target)
       if (!target) {
@@ -172,6 +169,7 @@ function initTrackingWs(rooms) {
       }
 
       const cmd = computeCmd(target)
+      console.log(`[tracking-ws] cible — dist=${target.distance}m angle=${target.angle}° conf=${target.conf} → speed=${cmd.speed} angular=${cmd.angular.toFixed(2)}`)
       enqueueMove(rooms, cmd.speed, cmd.angular, cmd.turnSpeed)
     })
 

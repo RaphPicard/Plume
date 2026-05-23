@@ -136,17 +136,18 @@ async function main() {
       const imu      = readIMU()
       const distance = readDistance()
 
-      // Détecter les obstacles et émettre une alerte
-      if (distance < 30) {
-        const severity = distance < 15 ? 'critical' : 'warning'
+      // Détecter les obstacles et émettre une alerte (seuil : 50 cm)
+      if (distance < 50) {
+        const severity = distance < 25 ? 'critical' : 'warning'
         socket.emit('obstacle_alert', { severity, distanceCm: distance })
       }
 
       // Données capteurs → serveur
       socket.emit('sensor_data', { // on envoie les sensor_data et position_update au server (server/events/cart.js) qui les relaie aux utilisateurs et admins concernés ; les données de capteurs sont aussi envoyées aux admins via rooms.toAdmins pour qu'ils puissent voir les données de tous les chariots dans le dashboard admin
-        weightKg:   readWeight(),
-        batteryPct: battery,
-        speedMs:    tracking ? speed : 0,
+        weightKg:      readWeight(),
+        batteryPct:    battery,
+        speedMs:       tracking ? speed : 0,
+        distanceToUser: +(distance / 100).toFixed(2),  // distance obstacle en mètres (HC-SR04)
         ...imu,
       })
 

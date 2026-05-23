@@ -106,6 +106,7 @@ function registerUserEvents(io, socket, rooms) {
       rooms.setCartStatus(cartId, 'pairing_pending')
       rooms.enqueueCmd(cartId, 'pairing_mode', [])
 
+      console.log(`[request_pairing] userId="${userId}" cartId="${cartId}" → pairing_pending, commande pairing_mode envoyée`)
       callback({ ok: true, cartId })
     } catch (err) {
       console.error('[request_pairing]', err.message)
@@ -217,6 +218,7 @@ async function confirmPairing(cartId) {
   const { userId, socketId } = pending
 
   await setCartOwner(cartId, userId)
+  console.log(`[confirmPairing] cartId="${cartId}" userId="${userId}" → Redis ownerId mis à jour, pairing_confirmed envoyé`)
 
   const userSocket = _io.sockets.sockets.get(socketId)
   if (!userSocket) throw new Error(`Socket utilisateur ${socketId} déconnecté`)
