@@ -1,198 +1,284 @@
-// raspberry/cart_client.js
-// Script principal du chariot Raspberry Pi.
-// À lancer au démarrage de la carte : node cart_client.js
-//
-// Dépendances : npm install socket.io-client node-fetch
-// (node-fetch uniquement si Node < 18 ; Node 18+ a fetch natif)
+const WebSocket = require('ws');
+const fs = require('fs');
+const { SerialPort } = require('serialport');
+const { DelimiterParser } = require('@serialport/parser-delimiter');
+const express = require('express');
+const http = require('http');
 
-const { io }    = require('socket.io-client')
-const { SERVER_URL, CART_ID, CART_SECRET, SENSOR_INTERVAL_MS } = require('./config')
+let tracking = false;
+let autoTrackingActive = false;
 
-const { readIMU }      = require('./sensors/imu')
-const { readWeight }   = require('./sensors/weight')
-const { readBattery }  = require('./sensors/battery')
-const { readDistance } = require('./sensors/distance')
+// ─── UART ─────────────────────────────────────────────────────────────────────
+const uart = new SerialPort({
+  path: '/dev/serial0',
+  baudRate: 19200,
+});
 
-// ── 1. Récupérer le JWT auprès du serveur ────────────────────────────────────
+const parser = uart.pipe(new DelimiterParser({ delimiter: '\r' }));
 
-async function fetchToken() {
-  const res = await fetch(`${SERVER_URL}/cart-token`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ cartId: CART_ID, cartSecret: CART_SECRET }), // on définit le cart_id du raspberry Pi dans config.js, et on utilise le cartSecret partagé avec le serveur (CART_SECRET dans .env) pour obtenir un token JWT auprès du serveur (server/index.js : route POST /cart-token) en envoyant { cartId, cartSecret } et en recevant { token } si le secret est valide, ou une erreur sinon
-  })
-  // reponse donnée par le serveur dans server/index.js : res.json({ token }) ou res.status(401).json({ error: 'Secret invalide' })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(`Impossible d'obtenir le token : ${err.error || res.status}`)
+uart.on('open',  () => console.log('[UART] Port ouvert'));
+uart.on('error', (err) => console.error('[UART] Erreur:', err.message));
+
+parser.on('data', (raw) => {
+  // Logs détaillés pour debug
+  console.log('[STM32 RAW] bytes:', raw, '| length:', raw.length, '| hex:', raw.toString('hex'));
+
+  const msg = raw.toString('utf8').replace(/[\r\n]/g, '').trim();
+  console.log('[STM32 CLEAN]', JSON.stringify(msg), '| length:', msg.length);
+
+  if (!msg) return;
+  console.log('[STM32 →]', msg);
+
+  if (msg === 'CONFIRM') {
+    console.log('[BTN] ✅ CONFIRM détecté → déverrouillage');
+    triggerUnlock();
+  } else {
+    console.log('[BTN] ⚠️ message reçu mais != CONFIRM:', JSON.stringify(msg));
   }
-  const { token } = await res.json()
-  return token
+});
+
+// ─── PROTOCOLE ────────────────────────────────────────────────────────────────
+const STATUS = { available: 0x01, paired: 0x02, locked: 0x03 };
+const ALERT  = { low_battery: 0x01, obstacle_detected: 0x02 };
+
+// Vecteurs de déplacement par direction : [vx, vy]
+const DIR_VECTORS = {
+  forward:  [ 0,  1],
+  backward: [ 0, -1],
+  left:     [-1,  0],
+  right:    [ 1,  0],
+};
+
+// ─── FUSION DES COMMANDES MOVE ────────────────────────────────────────────────
+function fuseMoveCommands(cmds) {
+  const moves = cmds.filter(c => c.action === 'move');
+  if (moves.length === 0) return null;
+
+  let sumVx = 0, sumVy = 0, sumSpeed = 0, sumDiff = 0;
+
+  for (const cmd of moves) {
+    const args  = cmd.args ?? [];
+    const dir   = args[0];
+    const speed = args[1] ?? 50;
+    const diff  = args[2] ?? 50;
+    const vec   = DIR_VECTORS[dir];
+    if (!vec) continue;
+    sumVx    += vec[0] * speed;
+    sumVy    += vec[1] * speed;
+    sumSpeed += speed;
+    sumDiff  += diff;
+  }
+
+  const n     = moves.length;
+  const avgVx = sumVx / n;
+  const avgVy = sumVy / n;
+  const avgDiff = Math.round(sumDiff / n);
+
+  let dir, speed;
+  if (Math.abs(avgVy) >= Math.abs(avgVx)) {
+    dir   = avgVy >= 0 ? 'forward' : 'backward';
+    speed = Math.round(Math.abs(avgVy));
+  } else {
+    dir   = avgVx >= 0 ? 'right' : 'left';
+    speed = Math.round(Math.abs(avgVx));
+  }
+
+  speed = Math.max(1, Math.min(100, speed));
+
+  return { action: 'move', args: [dir, speed, avgDiff] };
 }
 
+// ─── TRAITEMENT JSON ──────────────────────────────────────────────────────────
+let pendingCommand = null;
 
+function handleCommand(jsonData) {
+  const cmds = jsonData.cmds ?? [];
+  if (cmds.length === 0) return;
 
+  console.log(`[CART] ${jsonData.cartId} | status: ${jsonData.status} | alerts: ${jsonData.alerts}`);
 
+  if (pendingCommand) {
+    clearTimeout(pendingCommand);
+    pendingCommand = null;
+  }
 
+  const fusedMove = fuseMoveCommands(cmds);
+  const lastNonMove = [...cmds].reverse().find(c => c.action !== 'move');
 
+  const finalCmd = lastNonMove ?? fusedMove;
+  if (!finalCmd) return;
 
-// ── 2. Connexion WebSocket + boucle capteurs ─────────────────────────────────
+  console.log(`[CMD] action: ${finalCmd.action} args: ${JSON.stringify(finalCmd.args ?? [])}`);
 
-async function main() {
-  let token
+  pendingCommand = setTimeout(() => {
+    const frame = buildFrame(finalCmd.action, finalCmd.args ?? []);
+    if (frame) sendFrame(frame);
+    pendingCommand = null;
+  }, 0);
+}
+
+// ─── CONSTRUCTION TRAME ASCII ─────────────────────────────────────────────────
+function buildFrame(action, args) {
+  let str;
+
+  switch (action) {
+    case 'move': {
+      const dir   = args[0];
+      const speed = args[1] ?? 50;
+      const diff  = args[2] ?? 50;
+
+      switch (dir) {
+        case 'forward':  str = `FWD ${speed}`;           break;
+        case 'backward': str = `BWD ${speed}`;           break;
+        case 'left':     str = `TL ${speed} ${diff}`;    break;
+        case 'right':    str = `TR ${speed} ${diff}`;    break;
+        default:
+          console.warn(`[WARN] Direction inconnue : ${dir}`);
+          return null;
+      }
+      break;
+    }
+
+    case 'stop':
+    case 'return_to_base':
+      str = 'STOP';
+      break;
+
+    default:
+      console.warn(`[WARN] Action inconnue : ${action}`);
+      return null;
+  }
+
+  console.log(`[TRAME] ${str}`);
+  return Buffer.from(str + '\r\n');
+}
+
+function sendFrame(frame) {
+  uart.write(frame, (err) => {
+    if (err) console.error('[UART] Write error:', err.message);
+    else     console.log('[→ STM32]', frame.toString().trim());
+  });
+}
+
+// ─── DÉVERROUILLAGE PAR BOUTON PHYSIQUE (STM32) ───────────────────────────────
+async function triggerUnlock() {
+  console.log('[BTN] triggerUnlock() appelée');
+  const url = `${SERVER}/simulate/cart-confirm/${CART_ID}`;
+  console.log('[BTN] POST vers:', url);
   try {
-    token = await fetchToken() 
-    console.log(`[auth] Token JWT obtenu pour ${CART_ID}`)
-  } catch (err) {
-    console.error('[auth]', err.message)
-    process.exit(1)
+    const res = await fetch(url, { method: 'POST' });
+    console.log('[BTN] HTTP status:', res.status);
+    const data = await res.json();
+    console.log('[BTN] Réponse serveur:', data);
+    if (data.ok) {
+      console.log('[BTN] ✅ Pairing confirmé pour', CART_ID);
+    } else {
+      console.error('[BTN] ❌ Erreur:', data.error);
+    }
+  } catch (e) {
+    console.error('[BTN] ❌ Échec requête:', e.message);
   }
+}
 
-  const socket = io(SERVER_URL, { // avant d'accepter la connexion, le serveur Socket.IO (server/index.js) appelle authMiddleware (server/auth.js) qui vérifie le token et extrait cartId pour authentifier le chariot
-    auth: { token }, // token envoyé dans socket.handshake.auth (server/auth.js : authMiddleware) pour authentifier le chariot auprès du serveur WebSocket
-    reconnection:        true,
-    reconnectionDelay:   2000,
-    reconnectionDelayMax:30000,
-    reconnectionAttempts:Infinity,
-  })
+// ─── SERVEUR HTTP ─────────────────────────────────────────────────────────────
+const app = express();
 
-  let tracking     = false   // true dès que start_tracking reçu
-  let sensorTimer  = null
-  let speed        = 0       // vitesse courante (m/s), modifiée par les commandes
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
 
-  // ── Connexion établie ───────────────────────────────────────────────────────
+app.use(express.json());
+
+app.post('/command/register', (req, res) => {
+  const { duration } = req.body;
+  console.log(`[HTTP] POST /command/register - duration: ${duration}s`);
+  res.json({ ok: true, message: `Enregistrement de ${duration}s lancé` });
+
+  const detectionDurationMs = (duration || 10) * 1000;
+  setTimeout(() => {
+    autoTrackingActive = true;
+    tracking = true;
+    console.log('[DETECTION] Passage en auto_tracking');
+    if (socket?.connected) {
+      socket.emit('tracking_person_detected', {
+        cartId: CART_ID, status: 'auto_tracking', tracking: true,
+      });
+    }
+  }, detectionDurationMs);
+});
+
+app.post('/command/stop-tracking', (req, res) => {
+  console.log('[HTTP] POST /command/stop-tracking');
+  res.json({ ok: true, message: 'Auto-tracking arrêté' });
+  autoTrackingActive = false;
+  tracking = false;
+  if (socket?.connected) {
+    socket.emit('tracking_person_stopped', {
+      cartId: CART_ID, status: 'paired', tracking: false,
+    });
+  }
+});
+
+const httpServer = http.createServer(app);
+httpServer.listen(5500, '0.0.0.0', () => {
+  console.log('[HTTP SERVER] Écoute sur port 5500');
+});
+
+// ─── SOCKET.IO ────────────────────────────────────────────────────────────────
+const { io } = require('socket.io-client');
+
+const SERVER      = 'http://100.73.190.84:3000';
+const CART_ID     = 'C-042';
+const CART_SECRET = 'cart-dev-secret';
+
+let socket = null;
+
+async function getToken() {
+  const res = await fetch(`${SERVER}/cart-token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cartId: CART_ID, cartSecret: CART_SECRET }),
+  });
+  const { token } = await res.json();
+  return token;
+}
+
+async function start() {
+  const token = await getToken();
+  socket = io(SERVER, { auth: { token } });
+
   socket.on('connect', () => {
-    console.log(`[ws] Connecté au serveur (id=${socket.id})`)
-    startSensorLoop()
-  })
+    console.log('[Socket.IO] Connecté au serveur');
 
-  // ── Reconnexion après coupure ───────────────────────────────────────────────
-  socket.on('reconnect', (attempt) => {
-    console.log(`[ws] Reconnecté après ${attempt} tentative(s)`)
-    startSensorLoop()
-  })
+    setInterval(() => {
+      socket.emit('sensor_data', {
+        weightKg:   (Math.random() * 10).toFixed(1),
+        batteryPct: Math.floor(Math.random() * 100),
+        speedMs:    (autoTrackingActive || tracking) ? (Math.random() * 2).toFixed(2) : '0.00',
+        accelX:     (Math.random() - 0.5).toFixed(3),
+        accelY:     (Math.random() - 0.5).toFixed(3),
+      });
 
-  socket.on('disconnect', (reason) => {
-    console.warn('[ws] Déconnecté :', reason)
-    stopSensorLoop()
-  })
-
-  socket.on('connect_error', (err) => {
-    console.error('[ws] Erreur connexion :', err.message)
-  })
-
-  
-  
-  
-  // ── Commandes reçues du serveur ─────────────────────────────────────────────
-  socket.on('cmd', (cmd) => {
-    console.log('Commande reçue :', JSON.stringify(cmd, null, 2))
-    for (const command of cmd.cmds) {
-      switch (command.action) {
-        case 'start_tracking':
-          tracking = true
-          console.log('→ Suivi démarré')
-          break
-
-        case 'stop_tracking':
-        case 'stop':
-          tracking = false
-          speed    = 0
-          stopMotors()
-          break
-
-        case 'move': {
-          const [direction, speed, diff] = command.args
-          if (direction === 'stop') { stopMotors(); break }
-          if (tracking) move(direction, speed, diff)
-          break
-        }
-
-        case 'return_to_base':
-          tracking = false
-          speed    = 0
-          returnToBase()
-          break
-    }
-  }
-})
-
-
-  // ── Boucle d'envoi des capteurs ─────────────────────────────────────────────
-
-  function startSensorLoop() {
-    if (sensorTimer) return  // déjà lancée
-    sensorTimer = setInterval(() => { //envoie périodiquement les données de capteurs au serveur tant que le suivi est actif, et gère les alertes (ex: obstacle, batterie faible) en temps réel
-      const battery = readBattery()
-
-      // Retour automatique à la base si batterie critique
-      if (battery <= 5 && tracking) {
-        console.warn('[batterie] Niveau critique — retour à la base')
-        socket.emit('cmd', { action: 'return_to_base' })  // se signale à lui-même pour cohérence
-        tracking = false
-        returnToBase()
-      }
-
-      const imu      = readIMU()
-      const distance = readDistance()
-
-      // Détecter les obstacles et émettre une alerte (seuil : 50 cm)
-      if (distance < 50) {
-        const severity = distance < 25 ? 'critical' : 'warning'
-        socket.emit('obstacle_alert', { severity, distanceCm: distance })
-      }
-
-      // Données capteurs → serveur
-      socket.emit('sensor_data', { // on envoie les sensor_data et position_update au server (server/events/cart.js) qui les relaie aux utilisateurs et admins concernés ; les données de capteurs sont aussi envoyées aux admins via rooms.toAdmins pour qu'ils puissent voir les données de tous les chariots dans le dashboard admin
-        weightKg:      readWeight(),
-        batteryPct:    battery,
-        speedMs:       tracking ? speed : 0,
-        distanceToUser: +(distance / 100).toFixed(2),  // distance obstacle en mètres (HC-SR04)
-        ...imu,
-      })
-
-      // Position simulée (à remplacer par lecture GPS/UWB réelle)
-      if (tracking) {
+      if (autoTrackingActive || tracking) {
         socket.emit('position_update', {
-          x: +(Math.random() * 100).toFixed(1),
-          y: +(Math.random() * 100).toFixed(1),
-        })
+          x: (Math.random() * 100).toFixed(1),
+          y: (Math.random() * 100).toFixed(1),
+        });
       }
-    }, SENSOR_INTERVAL_MS)
-  }
+    }, 1000);
+  });
 
-  function stopSensorLoop() {
-    if (sensorTimer) {
-      clearInterval(sensorTimer)
-      sensorTimer = null
-    }
-  }
+  socket.on('connect_error', (err) => console.error('[Socket.IO] Erreur:', err.message));
+  socket.on('disconnect',    ()    => console.log('[Socket.IO] Déconnecté'));
+
+  socket.on('cmd', (data) => {
+    console.log('[← SERVEUR]', JSON.stringify(data, null, 2));
+    handleCommand(data);
+  });
 }
 
-
-
-// ── 3. Contrôle des moteurs (stubs GPIO) ─────────────────────────────────────
-// Remplacer ces fonctions par les appels GPIO réels (onoff, pigpio, etc.)
-
-function move(direction, speed = 0, diff = 0) {
-  console.log(`→ Déplacement : ${direction}, vitesse=${speed}, diff=${diff}`)
-  // GPIO (à brancher) :
-  //   'forward'  : les deux moteurs à speed
-  //   'backward' : les deux moteurs en arrière à speed
-  //   'left'     : moteur droit à speed, moteur gauche à (speed - diff)
-  //   'right'    : moteur gauche à speed, moteur droit à (speed - diff)
-}
-
-function stopMotors() {
-  console.log('→ Moteurs arrêtés')
-  // motorLeft.write(0) ; motorRight.write(0)
-}
-
-function returnToBase() {
-  console.log('→ Retour à la base (navigation autonome à implémenter)')
-  // Ici : logique de navigation autonome ou simple arrêt moteurs
-  stopMotors()
-}
-
-// ── Démarrage ─────────────────────────────────────────────────────────────────
-main()
+start();
