@@ -1,0 +1,73 @@
+&uart4 {
+    pinctrl-0 = <&uart4_tx_pc10 &uart4_rx_pc11>;
+    pinctrl-names = "default";
+    current-speed = <19200>;
+    status = "okay";
+};
+
+&uart5 {
+    pinctrl-0 = <&uart5_tx_pc12 &uart5_rx_pd2>;
+    pinctrl-names = "default";
+    current-speed = <115200>;
+    status = "okay";
+};
+
+&i2c1 {
+    status = "okay";
+    pinctrl-0 = <&i2c1_scl_pb6 &i2c1_sda_pb7>;
+    pinctrl-names = "default";
+
+    adxl345: adxl345@53 {
+        compatible = "adi,adxl345";
+        reg = <0x53>;
+        status = "okay";
+    };
+};
+
+
+&pinctrl {
+    uart4_tx_pc10: uart4_tx_pc10 {
+        pinmux = <STM32_PINMUX('C', 10, AF5)>;
+        bias-pull-up;
+	    drive-open-drain;	
+        slew-rate = "very-high-speed";
+
+    };
+
+    uart4_rx_pc11: uart4_rx_pc11 {
+        pinmux = <STM32_PINMUX('C', 11, AF5)>;
+        bias-pull-up;
+    };
+
+
+    uart5_tx_pc12: uart5_tx_pc12 {
+        pinmux = <STM32_PINMUX('C', 12, AF5)>;
+        /*drive-open-drain;*/
+        bias-pull-up;
+        slew-rate = "very-high-speed";
+    };
+
+    uart5_rx_pd2: uart5_rx_pd2 {
+        pinmux = <STM32_PINMUX('D', 2, AF5)>;
+        bias-pull-up;
+    };
+
+    i2c1_scl_pb6: i2c1_scl_pb6 {
+        pinmux = <STM32_PINMUX('B', 6, AF4)>;
+        drive-open-drain;
+        bias-pull-up;
+    };
+    i2c1_sda_pb7: i2c1_sda_pb7 {
+        pinmux = <STM32_PINMUX('B', 7, AF4)>;
+        drive-open-drain;
+        bias-pull-up;
+    };
+};
+
+
+&gpioa {
+    status = "okay";
+};
+&gpiob {
+    status = "okay";
+};

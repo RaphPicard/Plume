@@ -3,6 +3,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'    // état global
 import router from './router'           // navigation
 import App from './App.vue'
+import './style.css'                    // reset + fullscreen PWA
 
 const app = createApp(App)
 
