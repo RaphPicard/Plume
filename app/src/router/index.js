@@ -10,6 +10,7 @@ import AdminCartSelectView from '../views/AdminCartSelectView.vue'
 import { connectSocket } from '../api/socket'
 import { clearAdminSession, getAdminSession } from '../api/adminAuth'
 import { getAdminSelectedCart } from '../api/adminCartSelection'
+import { getScanSession } from '../api/scanAuth'
 
 const routes = [
   { path: '/',              component: ScanView },
@@ -35,6 +36,17 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  // Si l'utilisateur arrive sur la page d'accueil ET qu'une session utilisateur
+  // est encore active (chariot déverrouillé non terminé), on le ramène directement
+  // sur la vue de session.
+  if (to.path === '/') {
+    const activeCartId = localStorage.getItem('session_cart_id')
+    const scanSession = getScanSession()
+    if (activeCartId && scanSession) {
+      return '/session'
+    }
+  }
+
   if (to.path === '/admin') {
     const session = getAdminSession()
     if (session) {
