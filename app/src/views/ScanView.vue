@@ -3,7 +3,7 @@
   <div class="scan-screen">
 
     <header>
-      <span class="logo">AUTOCART</span>
+      <span class="logo">PLUME</span>
       <h1>Scanner un chariot</h1>
       <p>Connexion automatique à une session de scan.</p>
     </header>
@@ -63,6 +63,7 @@ import { useCartStore } from '../store/cart'
 import { connectSocket } from '../api/socket'
 import { getScanSession, saveScanSession } from '../api/scanAuth'
 import { SERVER_URL } from '../api/config'
+import { BrowserMultiFormatReader } from '@zxing/browser'
 
 const router = useRouter()  //le routeur va permettre de naviguer vers la vue de suivi (TrackingView) après le déverrouillage du chariot
 const store  = useCartStore() //appel cart.js pour partager les données du chariot entre les vues ScanView et TrackingView
@@ -86,9 +87,13 @@ const cameraStatusLabel = computed(() => {
   return 'Caméra active'
 })
 
-// Instance ZXing utilisée pour lire les QR codes dans la vidéo.
+// Deux lecteurs possibles selon le navigateur :
+// - BarcodeDetector (Chromium natif, rapide)
+// - ZXing en fallback (Safari/WebKit, Firefox, WebView iOS)
 let mediaStream = null
 let barcodeDetector = null
+let zxingReader = null
+let zxingControls = null
 let scanFrameId = null
 let scanStopped = false
 let lastDetectedValue = ''
@@ -100,6 +105,10 @@ function stopScanLoop() {
   if (scanFrameId !== null) {
     cancelAnimationFrame(scanFrameId)
     scanFrameId = null
+  }
+  if (zxingControls) {
+    zxingControls.stop()
+    zxingControls = null
   }
 }
 
@@ -174,17 +183,11 @@ async function scanFrame() {
 }
 
 async function startCamera() {
-  // Démarre la caméra et initialise ZXing seulement si la vue n'est pas déjà en cours d'ouverture.
+  // Démarre la caméra et initialise le bon lecteur QR selon le navigateur.
   if (cameraBusy.value || cameraActive.value) return
 
   if (!navigator.mediaDevices?.getUserMedia) {
     error.value = 'La caméra n’est pas disponible dans ce navigateur'
-    scannerHint.value = 'Saisissez l’identifiant manuellement'
-    return
-  }
-
-  if (!('BarcodeDetector' in window)) {
-    error.value = 'La lecture QR native n’est pas supportée par ce navigateur ==> CHROME'
     scannerHint.value = 'Saisissez l’identifiant manuellement'
     return
   }
@@ -194,8 +197,13 @@ async function startCamera() {
   scannerHint.value = 'Demande d’accès à la caméra...'
 
   try {
-    // Le lecteur n'est créé qu'une fois pour ne pas réinitialiser les paramètres à chaque lancement.
-    barcodeDetector = barcodeDetector || new window.BarcodeDetector({ formats: ['qr_code'] })
+    const useNativeDetector = 'BarcodeDetector' in window
+    if (useNativeDetector) {
+      barcodeDetector = barcodeDetector || new window.BarcodeDetector({ formats: ['qr_code'] })
+    } else {
+      zxingReader = zxingReader || new BrowserMultiFormatReader()
+    }
+
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
@@ -207,20 +215,26 @@ async function startCamera() {
       throw new Error('Le lecteur vidéo n’est pas prêt')
     }
 
-    // La vidéo affiche le flux caméra; ZXing lit ensuite directement dans cet élément.
     videoRef.value.srcObject = mediaStream
     await videoRef.value.play()
-
-    const { videoWidth, videoHeight } = videoRef.value
-    if (videoWidth && videoHeight) {
-      videoAspectRatio.value = `${videoWidth} / ${videoHeight}`
-    }
+    // On garde l'aspect-ratio CSS fixe (4/3) ; la vidéo est cropée par object-fit: cover.
 
     scanStopped = false
     cameraActive.value = true
     scannerHint.value = 'Cadrez le QR code du chariot dans la zone de scan'
     stopScanLoop()
-    scanFrameId = requestAnimationFrame(scanFrame)
+
+    if (useNativeDetector) {
+      // Boucle native via BarcodeDetector (Chromium)
+      scanFrameId = requestAnimationFrame(scanFrame)
+    } else {
+      // Fallback ZXing (Safari, WebView iOS, Firefox)
+      zxingControls = await zxingReader.decodeFromVideoElement(videoRef.value, (result) => {
+        if (result && !scanStopped) {
+          handleDetectedCode(result.getText())
+        }
+      })
+    }
   } catch (err) {
     stopCameraStream()
     const message = err instanceof Error ? err.message : 'Impossible d’ouvrir la caméra'
@@ -375,6 +389,9 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .scanner-frame {
   position: relative;
   aspect-ratio: 4/3;
+  max-height: 40vh;        /* limite la hauteur quoi qu'il arrive */
+  margin-inline: auto;
+  width: 100%;
   overflow: hidden;
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 16px;

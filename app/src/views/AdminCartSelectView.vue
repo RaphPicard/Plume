@@ -2,7 +2,7 @@
 <template>
   <div class="admin-select-screen">
     <header class="admin-select-header">
-      <span class="logo">AUTOCART</span>
+      <span class="logo">PLUME</span>
       <div>
         <h1>Choisir un chariot</h1>
         <p>Sélectionnez le cart à visualiser dans le tableau de bord.</p>

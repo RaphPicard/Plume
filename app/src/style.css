@@ -19,9 +19,16 @@ body,
   overscroll-behavior: none;
 }
 
+html,
 body {
-  /* Évite les rebonds élastiques iOS et stabilise le scroll en standalone */
-  overflow-x: hidden;
+  /* Vue fixe : pas de scroll vertical/horizontal, pas de rebond élastique iOS */
+  position: fixed;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+}
+
+body {
   -webkit-tap-highlight-color: transparent;
   /* Padding automatique pour le notch / dynamic island / home indicator */
   padding-top: env(safe-area-inset-top);
@@ -30,9 +37,27 @@ body {
   padding-left: env(safe-area-inset-left);
 }
 
+/* L'app prend toute la hauteur disponible, aucun scroll possible (vue fixe) */
+#app {
+  overflow: hidden;
+}
+
 /* Désactive la sélection de texte non désirée (UX d'app native) */
 button,
 .no-select {
   -webkit-user-select: none;
   user-select: none;
+}
+
+/* iOS Safari zoome automatiquement sur les inputs avec font-size < 16px.
+   On force 16px partout pour éviter ce zoom indésirable. */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+/* Empêche le double-tap zoom et autres gestes de zoom (UX d'app native) */
+html {
+  touch-action: manipulation;
 }

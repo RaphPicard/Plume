@@ -11,7 +11,8 @@
 
     <template v-else>
       <header class="unlock-header">
-        <span class="logo">AUTOCART</span>
+        <button class="back-btn" @click="goHome">← Accueil</button>
+        <span class="logo">PLUME</span>
         <div class="cart-label">Chariot {{ cartId }}</div>
       </header>
 
@@ -179,6 +180,15 @@ async function handleDeverrouiller() {
   }
 }
 
+function goHome() {
+  // Annule un éventuel pairing en cours puis retourne à l'écran de scan
+  if (pairing.value) {
+    cancelPairing(cartId)
+    clearInterval(countdownInterval)
+  }
+  router.push('/')
+}
+
 function handleCancelPairing() {
   clearInterval(countdownInterval)
   pairing.value    = false
@@ -273,6 +283,22 @@ onUnmounted(() => {
   width: 100%;
   max-width: 380px;
   margin-bottom: 28px;
+}
+
+.back-btn {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.85);
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  cursor: pointer;
+  margin-bottom: 18px;
+}
+
+.back-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .logo {

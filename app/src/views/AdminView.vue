@@ -2,7 +2,7 @@
 <template>
   <div class="admin-screen">
     <header class="admin-header">
-      <span class="logo">AUTOCART</span>
+      <span class="logo">PLUME</span>
       <h1>Dashboard Admin - {{ cartId }}</h1>
       <span class="badge-admin">Administrateur</span>
       <button class="change-cart-btn" type="button" @click="changeCart">Changer de chariot</button>

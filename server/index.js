@@ -22,6 +22,8 @@ app.use(cors({
     if (/^http:\/\/localhost(:\d+)?$/.test(origin)) return cb(null, true)
     // n'importe quelle IPv4 (LAN, Tailscale, etc.) — OK en dev
     if (/^http:\/\/(\d{1,3}\.){3}\d{1,3}(:\d+)?$/.test(origin)) return cb(null, true)
+    // Apps Capacitor / Ionic (iOS, Android)
+    if (/^(capacitor|ionic):\/\/localhost$/.test(origin)) return cb(null, true)
     cb(new Error('CORS: origine non autorisée'))
   }
 }))

@@ -2,7 +2,7 @@
 <template>
   <div class="admin-login-screen">
     <div class="admin-login-card">
-      <span class="logo">AUTOCART</span>
+      <span class="logo">PLUME</span>
       <h1>Connexion administrateur</h1>
       <p>Accédez au tableau de bord admin avec vos identifiants.</p>
 

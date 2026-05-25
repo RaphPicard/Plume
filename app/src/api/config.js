@@ -4,11 +4,23 @@
 
 const env = import.meta.env
 
+// Détecte si on est dans Capacitor (app native iOS/Android via WebView).
+// Dans ce cas, window.location.hostname ne pointe pas vers un vrai serveur :
+// on doit utiliser une IP/host fixe configurée.
+function isCapacitor() {
+  return typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform?.()
+}
+
 // ── Serveur Node.js ──────────────────────────────────────────────────────────
-// Si VITE_SERVER_HOST n'est pas défini, on utilise le hostname courant (utile
-// depuis un téléphone : la page chargée via 100.73.190.84:5173 parlera avec
-// 100.73.190.84:3000 automatiquement).
+// Priorité :
+// 1. VITE_NATIVE_SERVER_HOST si on est dans Capacitor (app iOS/Android)
+// 2. VITE_SERVER_HOST si défini (force une cible spécifique)
+// 3. window.location.hostname (utile depuis un navigateur mobile via Tailscale)
+// 4. localhost en dernier recours
 function getServerHost() {
+  if (isCapacitor()) {
+    return env.VITE_NATIVE_SERVER_HOST || '100.73.190.84'
+  }
   if (env.VITE_SERVER_HOST) return env.VITE_SERVER_HOST
   const host = window.location.hostname
   if (!host || window.location.protocol === 'file:') return 'localhost'
