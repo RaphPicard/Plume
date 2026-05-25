@@ -12,6 +12,9 @@
     "app:build": "vite build && electron-builder"
   },
   "dependencies": {
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4",
+    "@capacitor/ios": "^8.3.4",
     "@zxing/browser": "^0.2.0",
     "pinia": "^3.0.4",
     "socket.io-client": "^4.8.3",

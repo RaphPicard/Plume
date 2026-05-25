@@ -5,6 +5,8 @@ import electron from 'vite-plugin-electron'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  // Chemin relatif obligatoire pour fonctionner dans le WebView Capacitor (iOS)
+  base: './',
   server: {
     host: '0.0.0.0',
   },
