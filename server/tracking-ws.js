@@ -15,7 +15,7 @@ const RECONNECT_MS    = 3000   // délai avant reconnexion automatique
 
 // ── Paramètres de suivi ────────────────────────────────────────────────────────
 // Vitesse linéaire selon la distance :
-//   < FORWARD_MIN_DIST → vitesse 0 (arrêt + zone tampon)
+//   < FORWARD_MIN_DIST → vitesse 0 (arrêt + zone tampon = on n'essaie pas de suivre si la cible est trop proche, pour éviter les oscillations dues aux imprécisions de la détection)
 //   >= FORWARD_MIN_DIST → vitesse MAX_SPEED (toujours plein gaz quand on avance)
 const FORWARD_MIN_DIST = 1.0  // m — en-dessous: arrêt
 const ANGLE_DEAD_ZONE  = 15   // ° — zone morte : en dessous on considère que la cible est en face
@@ -42,15 +42,21 @@ function computeSpeed(distance) {
 function computeTurnSpeed(distance) {
   if (distance <= TURN_DIST_NEAR) return TURN_SPEED_NEAR
   if (distance >= TURN_DIST_FAR)  return TURN_SPEED_FAR
+  // Interpolation linéaire entre TURN_SPEED_NEAR et TURN_SPEED_FAR selon la distance
   const ratio = (distance - TURN_DIST_NEAR) / (TURN_DIST_FAR - TURN_DIST_NEAR)
   return Math.round(TURN_SPEED_NEAR + (TURN_SPEED_FAR - TURN_SPEED_NEAR) * ratio)
 }
+
+
+
+
+
 
 // ── Calcul de la commande de mouvement ────────────────────────────────────────
 function computeCmd(target) {
   const { distance, angle, conf } = target
 
-  if (conf < MIN_CONF) return { speed: 0, angular: 0, turnSpeed: 0 }
+  if (conf < MIN_CONF) return { speed: 0, angular: 0, turnSpeed: 0 } // si la confiance est trop faible, on ne bouge pas (on pourrait aussi envisager de stopper le robot pour éviter les mouvements erratiques, mais dans ce cas on pourrait avoir des arrêts brusques à cause des pertes de détection ponctuelles, d'où le choix de ne rien faire et de laisser la dernière commande active)
 
   const speed = computeSpeed(distance)
   const turnSpeed = computeTurnSpeed(distance)
@@ -68,6 +74,11 @@ function computeCmd(target) {
 
   return { speed, angular, turnSpeed }
 }
+
+
+
+
+
 
 // ── Injection des commandes directionnelles dans la file batch ────────────────
 // - Deduplication : on ne re-envoie pas la même commande deux fois de suite
@@ -157,17 +168,19 @@ function initTrackingWs(rooms) {
         return // guard : n'agir que si le mode de contrôle est auto_tracking
       }
 
+      // si le mode n'est pas tracking
       if (mode !== 'tracking') {
         enqueueMove(rooms, 0, 0)
         return
       }
-
+      // si pas de cible détectée
       const target = persons.find(p => p.is_target)
       if (!target) {
         enqueueMove(rooms, 0, 0)
         return
       }
 
+      // on envoie la commande de mouvement calculée à la file du chariot (qui sera flushée au prochain tick) ; la commande ne sera envoyée que si elle est différente de la dernière pour éviter les messages redondants, ou si elle est restée trop longtemps identique pour forcer une refresh périodique
       const cmd = computeCmd(target)
       console.log(`[tracking-ws] cible — dist=${target.distance}m angle=${target.angle}° conf=${target.conf} → speed=${cmd.speed} angular=${cmd.angular.toFixed(2)}`)
       enqueueMove(rooms, cmd.speed, cmd.angular, cmd.turnSpeed)

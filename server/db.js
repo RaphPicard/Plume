@@ -1,7 +1,7 @@
 // server/db.js
 //
 // Deux bases de données :
-//   • Redis     — état temps-réel des chariots (rapide, clé/valeur)
+//   • Redis     — état temps-réel des chariots (rapide, clé/valeur -> "cart:<cartId>"  →  JSON { ownerId, status })
 //   • PostgreSQL — persistance : utilisateurs, registre des chariots
 //
 // Toute la logique reste ici ; le reste du code ne change pas.
@@ -72,7 +72,7 @@ async function clearCartOwner(cartId) {
   await redis.set(`cart:${cartId}`, JSON.stringify({ ownerId: null, status: 'available' }))
 }
 
-// ---- Réinitialiser tous les chariots à available (appelé au démarrage du serveur) ----
+// ---- Réinitialiser tous les chariots à available (appelé au démarrage du serveur dans server/index.js) ----
 async function clearAllCartOwners() {
   const keys = await redis.keys('cart:*')
   if (keys.length === 0) return 0
@@ -96,6 +96,10 @@ async function getAllCarts() {
   )
 }
 
+
+
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Utilisateurs  (PostgreSQL)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -103,8 +107,8 @@ async function getAllCarts() {
 // Retourne { id, username, password_hash, role } ou null
 async function getUserByUsername(username) {
   const { rows } = await pg.query(
-    'SELECT id, username, password_hash, role FROM users WHERE username = $1',  // INJECTION SQL ???
-    [username]
+    'SELECT id, username, password_hash, role FROM users WHERE username = $1', 
+    [username] // En utilisant des paramètres ($1) et un tableau de valeurs ([username]), on évite les risques d'injection SQL, car le driver PostgreSQL s'assure que la valeur est correctement échappée. Donc NON, ce n'est pas une injection SQL.
   )
   return rows[0] ?? null
 }

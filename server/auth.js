@@ -10,7 +10,7 @@ if (!SECRET) throw new Error('[auth] JWT_SECRET manquant — définir dans .env'
 
 // Middleware d'authentification pour Socket.IO (appelé à chaque connexion WebSocket dans server/index.js)
 function authMiddleware(socket, next) {
-  const token = socket.handshake.auth.token; //mis dans le client lors de la connexion : socket = io('http://localhost:3000', { auth: { token } })
+  const token = socket.handshake.auth.token; //mis dans le client (raspberry/cart_client.js, app/src/api/socket.js) lors de la connexion : socket = io('http://localhost:3000', socket.auth = { token }
 
   if (!token) {
     console.log(`[auth] connexion refusée (401) — token manquant socket=${socket.id}`)

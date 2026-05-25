@@ -4,7 +4,7 @@
 
 const WebSocket = require('ws')
 
-const PYTHON_WS_URL = `${process.env.CAMERA_WS_URL || 'ws://100.81.175.3:8001'}/command`
+const PYTHON_WS_URL = `${process.env.CAMERA_WS_URL || 'ws://100.81.175.3:8002'}/command` // URL du serveur Python à laquelle se connecter (ex: ws://100.81.175.3:8002/command)
 const RECONNECT_DELAY_MS = 3000
 
 let pythonWs = null

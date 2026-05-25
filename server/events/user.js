@@ -103,8 +103,8 @@ function registerUserEvents(io, socket, rooms) {
       }, 60_000)
 
       _pairingPending.set(cartId, { userId, socketId: socket.id, timer })
-      rooms.setCartStatus(cartId, 'pairing_pending')
-      rooms.enqueueCmd(cartId, 'pairing_mode', [])
+      rooms.setCartStatus(cartId, 'pairing_pending') // !!!!!!!!!!!!!!!!!!
+      rooms.enqueueCmd(cartId, 'pairing_mode', []) // !!!!!!!!!!!!!!!!!! 
 
       console.log(`[request_pairing] userId="${userId}" cartId="${cartId}" → pairing_pending, commande pairing_mode envoyée`)
       callback({ ok: true, cartId })
@@ -206,7 +206,7 @@ function registerUserEvents(io, socket, rooms) {
   })
 }
 
-async function confirmPairing(cartId) {
+async function confirmPairing(cartId) { // appelé par index.js quand le pairing est confirmé (QR scanné et validé) 
   if (!_rooms || !_io) throw new Error('[confirmPairing] Module non initialisé')
 
   const pending = _pairingPending.get(cartId)

@@ -32,6 +32,6 @@ INSERT INTO carts (cart_id) VALUES ('C-001'), ('C-002'), ('C-042')
 -- Utilisateurs (remplacer les hashs par des valeurs générées via bcrypt)
 -- Mot de passe : raphou
 INSERT INTO users (username, password_hash, role) VALUES
-  ('raphou', '$2b$10$REMPLACER_PAR_UN_VRAI_HASH', 'admin'),
-  ('evan',   '$2b$10$REMPLACER_PAR_UN_VRAI_HASH', 'user')
-  ON CONFLICT DO NOTHING;
+  ('raphou', '$2b$10$REMPLACER_PAR_UN_VRAI_HASH', 'admin'), -- les password_hash ont été générés avec bcrypt à partir du mot de passe en clair "raphou"
+  ('evan',   '$2b$10$REMPLACER_PAR_UN_VRAI_HASH', 'user')  -- pour générer avec bcrypt :node -e "const b=require('bcrypt'); b.hash('raphou',10).then(console.log)" et node -e "const b=require('bcrypt'); b.hash('evan',10).then(console.log)"
+  ON CONFLICT DO NOTHING; -- car on peut réexécuter ce script sans vouloir recréer les mêmes utilisateurs, et on ne veut pas d'erreur de doublon (username UNIQUE)

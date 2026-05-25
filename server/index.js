@@ -138,11 +138,12 @@ const RoomManager = require('./rooms');
 
 // Attacher Socket.IO par-dessus
 const io = new Server(httpServer, {
-  cors: { origin: '*' }  // à restreindre en prod (* ==> http://localhost:5173) pour n'autoriser que le frontend à se connecter
+  cors: { origin: '*' }  // à restreindre en prod (* ==> http://localhost:5173) pour n'autoriser que le frontend à se connecter, mais en dev on peut laisser * pour éviter les problèmes de CORS si le frontend change de port (5173, 5174, etc.)
 });
 
+// !!!!!!!!! pour le tracking auto :
 const rooms = new RoomManager(io);
-initUserEvents(io, rooms);
+initUserEvents(io, rooms); // initialiser les événements liés aux utilisateurs (connexion à un chariot, réception des données de suivi, etc.) — on doit injecter l'instance de RoomManager pour pouvoir gérer les salles et les états des chariots dans ces événements
 initTrackingWs(rooms); // initialiser le module de suivi automatique des chariots via WebSocket (serveur caméra) — ce module se connecte au serveur caméra (Python/RPi) pour recevoir les données de suivi (distance, angle, etc.) et injecter les commandes de mouvement dans la file batch du chariot C-042 via rooms.enqueueCmd()
 
 // Proxy WebSocket vers le serveur Python (relaie les messages /command via Socket.IO)
@@ -151,10 +152,10 @@ pythonProxy.init(io);
 
 
 
-
+// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 // Authentification : chaque client doit s'authentifier à la connexion
 io.use(authMiddleware); //cette ligne permet d'exécuter le middleware d'authentification pour chaque connexion entrante. Le middleware vérifie le token JWT fourni par le client et, s'il est valide, injecte les données d'authentification (role, userId, cartId) dans socket.data. Si le token est manquant ou invalide, la connexion est rejetée avec une erreur.
-
+// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
 
@@ -184,6 +185,8 @@ io.on('connection', (socket) => { //a ce stade, le client est déjà authentifi�
 app.get('/', (_req, res) => { //_req car on s'en fiche de la requête HTTP, on veut juste tester que le serveur répond
   res.send('Hello World from Express! Tout se passe sur le frontend pour l utilisateur (http://localhost:5173) et sur les WebSockets)');
 });
+
+
 // Réinitialiser tous les chariots à 'available' au démarrage du serveur
 const { clearAllCartOwners } = require('./db');
 clearAllCartOwners()

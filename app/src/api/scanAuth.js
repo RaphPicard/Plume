@@ -1,4 +1,5 @@
 // src/api/scanAuth.js
+// Ce module gère la session d'authentification côté frontend pour l'interface de scan (CartUnlockView). Il stocke le token JWT dans localStorage, fournit une fonction pour récupérer la session courante (en vérifiant sa validité et son rôle), et une fonction pour effacer la session lors du logout.
 const SCAN_SESSION_KEY = 'scan_session'
 
 function decodeBase64Url(value) {

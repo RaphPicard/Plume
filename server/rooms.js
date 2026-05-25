@@ -189,7 +189,7 @@ class RoomManager {
         cmds,
       })
 
-      this._cmdQueues.set(cartId, []) //vide la file de commandes et d'alertes après l'envoi
+      this._cmdQueues.set(cartId, []) //vide la file de commandes et d'alertes après l'envoi car elles ont été envoyées au chariot, et on peut réinitialiser la file pour le prochain batch
       this._alertQueues.set(cartId, []) 
     }
   }
